@@ -3,10 +3,15 @@ from __future__ import annotations
 import io
 import math
 import sys
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from PIL import Image
+try:
+    import numpy as np
+except ImportError:  # pragma: no cover - optional dependency
+    np = None
 
 
 class PixelSnapperError(Exception):
@@ -29,6 +34,8 @@ class Config:
     fallback_target_segments: int = 64
     max_step_ratio: float = 1.8
     preview: bool = False
+    timing: bool = False
+    use_numpy: bool = True
 
 
 def validate_image_dimensions(width: int, height: int) -> None:
@@ -42,6 +49,13 @@ def quantize_image(img: Image.Image, config: Config) -> Image.Image:
     if config.k_colors <= 0:
         raise PixelSnapperError("Number of colors must be greater than 0")
 
+    if np is not None and config.use_numpy:
+        return _quantize_image_numpy(img, config)
+
+    return _quantize_image_python(img, config)
+
+
+def _quantize_image_python(img: Image.Image, config: Config) -> Image.Image:
     pixels = img.load()
     width, height = img.size
     opaque_pixels: List[Tuple[float, float, float]] = []
@@ -157,7 +171,105 @@ def quantize_image(img: Image.Image, config: Config) -> Image.Image:
     return new_img
 
 
-def compute_profiles(img: Image.Image) -> Tuple[List[float], List[float]]:
+def _quantize_image_numpy(img: Image.Image, config: Config) -> Image.Image:
+    arr = np.array(img, dtype=np.uint8)
+    alpha = arr[:, :, 3]
+    mask = alpha != 0
+    opaque_pixels = arr[mask][:, :3].astype(np.float64, copy=False)
+    n_pixels = opaque_pixels.shape[0]
+    if n_pixels == 0:
+        return img.copy()
+
+    import random
+
+    rng = random.Random(config.k_seed)
+    k = min(config.k_colors, n_pixels)
+
+    def dist_sq(p: np.ndarray, c: np.ndarray) -> np.ndarray:
+        diff = p - c
+        return np.sum(diff * diff, axis=1)
+
+    centroids = np.zeros((k, 3), dtype=np.float64)
+    first_idx = rng.randrange(n_pixels)
+    centroids[0] = opaque_pixels[first_idx]
+    distances = np.full(n_pixels, np.inf, dtype=np.float64)
+
+    for i in range(1, k):
+        last_c = centroids[i - 1]
+        d_sq = dist_sq(opaque_pixels, last_c)
+        distances = np.minimum(distances, d_sq)
+        sum_sq_dist = float(distances.sum())
+        if sum_sq_dist <= 0.0:
+            idx = rng.randrange(n_pixels)
+        else:
+            r = rng.random() * sum_sq_dist
+            cumulative = 0.0
+            idx = 0
+            for j, d in enumerate(distances):
+                cumulative += float(d)
+                if cumulative >= r:
+                    idx = j
+                    break
+        centroids[i] = opaque_pixels[idx]
+
+    prev_centroids = centroids.copy()
+    chunk_size = 100_000
+    for iteration in range(config.max_kmeans_iterations):
+        sums = np.zeros((k, 3), dtype=np.float64)
+        counts = np.zeros(k, dtype=np.int64)
+
+        for start in range(0, n_pixels, chunk_size):
+            end = min(start + chunk_size, n_pixels)
+            chunk = opaque_pixels[start:end]
+            diff = chunk[:, None, :] - centroids[None, :, :]
+            dists = np.sum(diff * diff, axis=2)
+            labels = np.argmin(dists, axis=1)
+            for idx in range(k):
+                mask_idx = labels == idx
+                if mask_idx.any():
+                    sums[idx] += chunk[mask_idx].sum(axis=0)
+                    counts[idx] += int(mask_idx.sum())
+
+        new_centroids = centroids.copy()
+        for idx in range(k):
+            if counts[idx] > 0:
+                new_centroids[idx] = sums[idx] / float(counts[idx])
+
+        if iteration > 0:
+            movement = np.sum((new_centroids - prev_centroids) ** 2, axis=1).max()
+            if movement < 0.01:
+                centroids = new_centroids
+                break
+
+        prev_centroids = new_centroids.copy()
+        centroids = new_centroids
+
+    flat = arr.reshape(-1, 4)
+    flat_mask = flat[:, 3] != 0
+    rgb = flat[flat_mask, :3].astype(np.float64, copy=False)
+    nearest = np.empty(rgb.shape[0], dtype=np.int64)
+    for start in range(0, rgb.shape[0], chunk_size):
+        end = min(start + chunk_size, rgb.shape[0])
+        chunk = rgb[start:end]
+        diff = chunk[:, None, :] - centroids[None, :, :]
+        dists = np.sum(diff * diff, axis=2)
+        nearest[start:end] = np.argmin(dists, axis=1)
+
+    new_rgb = np.rint(centroids[nearest]).clip(0, 255).astype(np.uint8)
+    flat_out = flat.copy()
+    flat_out[flat_mask, :3] = new_rgb
+    out_arr = flat_out.reshape(arr.shape)
+    return Image.fromarray(out_arr, "RGBA")
+
+
+def compute_profiles(img: Image.Image, config: Config) -> Tuple[List[float], List[float]]:
+    if np is not None and config.use_numpy:
+        return _compute_profiles_numpy(img)
+
+    return _compute_profiles_python(img)
+
+
+def _compute_profiles_python(img: Image.Image) -> Tuple[List[float], List[float]]:
     width, height = img.size
     if width < 3 or height < 3:
         raise PixelSnapperError("Image too small (minimum 3x3)")
@@ -187,6 +299,33 @@ def compute_profiles(img: Image.Image) -> Tuple[List[float], List[float]]:
             row_proj[y] += grad
 
     return col_proj, row_proj
+
+
+def _compute_profiles_numpy(img: Image.Image) -> Tuple[List[float], List[float]]:
+    width, height = img.size
+    if width < 3 or height < 3:
+        raise PixelSnapperError("Image too small (minimum 3x3)")
+
+    arr = np.array(img, dtype=np.uint8)
+    r = arr[:, :, 0].astype(np.float64)
+    g = arr[:, :, 1].astype(np.float64)
+    b = arr[:, :, 2].astype(np.float64)
+    a = arr[:, :, 3]
+
+    gray = 0.299 * r + 0.587 * g + 0.114 * b
+    gray[a == 0] = 0.0
+
+    col_proj = np.zeros(width, dtype=np.float64)
+    row_proj = np.zeros(height, dtype=np.float64)
+
+    if width >= 3:
+        grad_x = np.abs(gray[:, 2:] - gray[:, :-2])
+        col_proj[1:-1] = grad_x.sum(axis=0)
+    if height >= 3:
+        grad_y = np.abs(gray[2:, :] - gray[:-2, :])
+        row_proj[1:-1] = grad_y.sum(axis=1)
+
+    return col_proj.tolist(), row_proj.tolist()
 
 
 def estimate_step_size(profile: Sequence[float], config: Config) -> Optional[float]:
@@ -459,7 +598,14 @@ def stabilize_both_axes(
     return col_cuts_pass1, row_cuts_pass1
 
 
-def resample(img: Image.Image, cols: Sequence[int], rows: Sequence[int]) -> Image.Image:
+def resample(img: Image.Image, cols: Sequence[int], rows: Sequence[int], config: Config) -> Image.Image:
+    if np is not None and config.use_numpy:
+        return _resample_numpy(img, cols, rows)
+
+    return _resample_python(img, cols, rows)
+
+
+def _resample_python(img: Image.Image, cols: Sequence[int], rows: Sequence[int]) -> Image.Image:
     if len(cols) < 2 or len(rows) < 2:
         raise PixelSnapperError("Insufficient grid cuts for resampling")
 
@@ -498,22 +644,73 @@ def resample(img: Image.Image, cols: Sequence[int], rows: Sequence[int]) -> Imag
     return final_img
 
 
+def _resample_numpy(img: Image.Image, cols: Sequence[int], rows: Sequence[int]) -> Image.Image:
+    if len(cols) < 2 or len(rows) < 2:
+        raise PixelSnapperError("Insufficient grid cuts for resampling")
+
+    out_w = max(len(cols) - 1, 1)
+    out_h = max(len(rows) - 1, 1)
+    final_img = Image.new("RGBA", (out_w, out_h))
+
+    arr = np.array(img, dtype=np.uint8)
+    height, width = arr.shape[:2]
+
+    for y_i, (ys, ye) in enumerate(zip(rows[:-1], rows[1:])):
+        for x_i, (xs, xe) in enumerate(zip(cols[:-1], cols[1:])):
+            if xe <= xs or ye <= ys:
+                continue
+
+            ys_clamped = min(max(ys, 0), height)
+            ye_clamped = min(max(ye, 0), height)
+            xs_clamped = min(max(xs, 0), width)
+            xe_clamped = min(max(xe, 0), width)
+
+            block = arr[ys_clamped:ye_clamped, xs_clamped:xe_clamped]
+            if block.size == 0:
+                continue
+
+            flat = block.reshape(-1, 4).astype(np.uint32)
+            packed = (
+                (flat[:, 0] << 24)
+                | (flat[:, 1] << 16)
+                | (flat[:, 2] << 8)
+                | flat[:, 3]
+            )
+            values, counts = np.unique(packed, return_counts=True)
+            max_count = counts.max()
+            best_value = values[counts == max_count][0]
+
+            r = int((best_value >> 24) & 0xFF)
+            g = int((best_value >> 16) & 0xFF)
+            b = int((best_value >> 8) & 0xFF)
+            a = int(best_value & 0xFF)
+            final_img.putpixel((x_i, y_i), (r, g, b, a))
+
+    return final_img
+
+
 def process_image_bytes_common(input_bytes: bytes, config: Optional[Config] = None) -> bytes:
     config = config or Config()
 
+    t0 = time.perf_counter()
     img = Image.open(io.BytesIO(input_bytes)).convert("RGBA")
     width, height = img.size
     validate_image_dimensions(width, height)
+    t1 = time.perf_counter()
 
     quantized = quantize_image(img, config)
-    profile_x, profile_y = compute_profiles(quantized)
+    t2 = time.perf_counter()
+    profile_x, profile_y = compute_profiles(quantized, config)
+    t3 = time.perf_counter()
 
     step_x_opt = estimate_step_size(profile_x, config)
     step_y_opt = estimate_step_size(profile_y, config)
     step_x, step_y = resolve_step_sizes(step_x_opt, step_y_opt, width, height, config)
+    t4 = time.perf_counter()
 
     raw_col_cuts = walk(profile_x, step_x, width, config)
     raw_row_cuts = walk(profile_y, step_y, height, config)
+    t5 = time.perf_counter()
 
     col_cuts, row_cuts = stabilize_both_axes(
         profile_x,
@@ -524,11 +721,28 @@ def process_image_bytes_common(input_bytes: bytes, config: Optional[Config] = No
         height,
         config,
     )
+    t6 = time.perf_counter()
 
-    output_img = resample(quantized, col_cuts, row_cuts)
+    output_img = resample(quantized, col_cuts, row_cuts, config)
+    t7 = time.perf_counter()
 
     out_buf = io.BytesIO()
     output_img.save(out_buf, format="PNG")
+    t8 = time.perf_counter()
+
+    if config.timing:
+        print(
+            "Timing (s): "
+            f"load={t1 - t0:.4f}, "
+            f"quantize={t2 - t1:.4f}, "
+            f"profiles={t3 - t2:.4f}, "
+            f"step={t4 - t3:.4f}, "
+            f"walk={t5 - t4:.4f}, "
+            f"stabilize={t6 - t5:.4f}, "
+            f"resample={t7 - t6:.4f}, "
+            f"encode={t8 - t7:.4f}, "
+            f"total={t8 - t0:.4f}"
+        )
     return out_buf.getvalue()
 
 
@@ -562,16 +776,30 @@ def preview_side_by_side(input_bytes: bytes, output_bytes: bytes) -> None:
 def parse_args(argv: Sequence[str]) -> Config:
     args = list(argv[1:])
     preview = False
+    timing = False
+    use_numpy = True
     if "--preview" in args:
         preview = True
         args.remove("--preview")
+    if "--timing" in args:
+        timing = True
+        args.remove("--timing")
+    if "--no-numpy" in args:
+        use_numpy = False
+        args.remove("--no-numpy")
 
     if len(args) < 2:
         raise PixelSnapperError(
-            "Usage: python pixel_snapper.py input.png output.png [k_colors] [--preview]"
+            "Usage: python pixel_snapper.py input.png output.png [k_colors] [--preview] [--timing] [--no-numpy]"
         )
 
-    config = Config(input_path=args[0], output_path=args[1], preview=preview)
+    config = Config(
+        input_path=args[0],
+        output_path=args[1],
+        preview=preview,
+        timing=timing,
+        use_numpy=use_numpy,
+    )
     if len(args) >= 3:
         try:
             k = int(args[2])
@@ -587,7 +815,7 @@ def parse_args(argv: Sequence[str]) -> Config:
             )
     if len(args) > 3:
         raise PixelSnapperError(
-            "Usage: python pixel_snapper.py input.png output.png [k_colors] [--preview]"
+            "Usage: python pixel_snapper.py input.png output.png [k_colors] [--preview] [--timing] [--no-numpy]"
         )
 
     return config
