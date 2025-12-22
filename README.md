@@ -53,7 +53,15 @@ The command accepts an optional k-colors argument:
 cargo run input.png output.png 16
 ```
 
-### 🌐 Web (WASM)
+### Python CLI
+
+`ash
+python -m pip install pillow
+`\r\n\r\n`ash
+python pixel_snapper.py input.png output.png
+`\r\n\r\n`ash
+python pixel_snapper.py input.png output.png 16
+`\r\n\r\n### 🌐 Web (WASM)
 
 ```bash
 git clone https://github.com/Hugo-Dz/spritefusion-pixel-snapper.git
@@ -77,3 +85,5 @@ Pixel Snapper is a [Sprite Fusion](https://spritefusion.com) project. Sprite Fus
 ## License
 
 MIT License [Hugo Duprez](https://www.hugoduprez.com/)
+
+
