@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import io
 import math
+import os
 import sys
 import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
+import csv
 
 from PIL import Image
 try:
@@ -36,6 +38,8 @@ class Config:
     preview: bool = False
     timing: bool = False
     use_numpy: bool = True
+    palette: Optional[str] = None
+    palette_space: str = "lab"
 
 
 def validate_image_dimensions(width: int, height: int) -> None:
@@ -48,6 +52,12 @@ def validate_image_dimensions(width: int, height: int) -> None:
 def quantize_image(img: Image.Image, config: Config) -> Image.Image:
     if config.k_colors <= 0:
         raise PixelSnapperError("Number of colors must be greater than 0")
+
+    if config.palette:
+        palette = load_palette(config.palette)
+        if np is not None and config.use_numpy:
+            return _quantize_palette_numpy(img, palette, config.palette_space)
+        return _quantize_palette_python(img, palette, config.palette_space)
 
     if np is not None and config.use_numpy:
         return _quantize_image_numpy(img, config)
@@ -260,6 +270,201 @@ def _quantize_image_numpy(img: Image.Image, config: Config) -> Image.Image:
     flat_out[flat_mask, :3] = new_rgb
     out_arr = flat_out.reshape(arr.shape)
     return Image.fromarray(out_arr, "RGBA")
+
+
+@dataclass
+class Palette:
+    rgb: List[Tuple[int, int, int]]
+    lab: List[Tuple[float, float, float]]
+
+
+def load_palette(palette_name: str) -> Palette:
+    palette_path = resolve_palette_path(palette_name)
+    colors: List[Tuple[int, int, int]] = []
+    lab_colors: List[Tuple[float, float, float]] = []
+    with open(palette_path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if not row:
+                continue
+            try:
+                r = int(row[3])
+                g = int(row[4])
+                b = int(row[5])
+                lab_l = float(row[9])
+                lab_a = float(row[10])
+                lab_b = float(row[11])
+            except (IndexError, ValueError) as exc:
+                raise PixelSnapperError(
+                    f"Invalid palette row in {palette_path}: {row}"
+                ) from exc
+            colors.append((r, g, b))
+            lab_colors.append((lab_l, lab_a, lab_b))
+
+    if not colors:
+        raise PixelSnapperError(f"No colors found in palette: {palette_path}")
+    return Palette(rgb=colors, lab=lab_colors)
+
+
+def resolve_palette_path(palette_name: str) -> str:
+    if os.path.exists(palette_name):
+        return palette_name
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    colors_dir = os.path.join(base_dir, "colors")
+
+    candidate = palette_name
+    if not candidate.lower().endswith(".csv"):
+        candidate = f"{candidate}.csv"
+    candidate_path = os.path.join(colors_dir, candidate)
+
+    if os.path.exists(candidate_path):
+        return candidate_path
+
+    available = []
+    if os.path.isdir(colors_dir):
+        for name in os.listdir(colors_dir):
+            if name.lower().endswith(".csv"):
+                available.append(os.path.splitext(name)[0])
+    available.sort()
+    hint = f" Available palettes: {', '.join(available)}" if available else ""
+    raise PixelSnapperError(f"Palette not found: {palette_name}.{hint}")
+
+
+def _quantize_palette_python(
+    img: Image.Image, palette: Palette, space: str
+) -> Image.Image:
+    pixels = img.load()
+    width, height = img.size
+    palette_f = [(float(r), float(g), float(b)) for r, g, b in palette.rgb]
+    palette_lab = palette.lab
+
+    def dist_sq(p: Tuple[float, float, float], c: Tuple[float, float, float]) -> float:
+        dr = p[0] - c[0]
+        dg = p[1] - c[1]
+        db = p[2] - c[2]
+        return dr * dr + dg * dg + db * db
+
+    def rgb_to_lab(r: int, g: int, b: int) -> Tuple[float, float, float]:
+        r_f = r / 255.0
+        g_f = g / 255.0
+        b_f = b / 255.0
+        r_lin = r_f / 12.92 if r_f <= 0.04045 else ((r_f + 0.055) / 1.055) ** 2.4
+        g_lin = g_f / 12.92 if g_f <= 0.04045 else ((g_f + 0.055) / 1.055) ** 2.4
+        b_lin = b_f / 12.92 if b_f <= 0.04045 else ((b_f + 0.055) / 1.055) ** 2.4
+
+        x = 0.4124564 * r_lin + 0.3575761 * g_lin + 0.1804375 * b_lin
+        y = 0.2126729 * r_lin + 0.7151522 * g_lin + 0.0721750 * b_lin
+        z = 0.0193339 * r_lin + 0.1191920 * g_lin + 0.9503041 * b_lin
+
+        x /= 0.95047
+        y /= 1.0
+        z /= 1.08883
+
+        delta = 6.0 / 29.0
+        def f(t: float) -> float:
+            return t ** (1.0 / 3.0) if t > delta ** 3 else (t / (3 * delta ** 2) + 4.0 / 29.0)
+
+        fx = f(x)
+        fy = f(y)
+        fz = f(z)
+        l = 116 * fy - 16
+        a = 500 * (fx - fy)
+        b = 200 * (fy - fz)
+        return l, a, b
+
+    new_img = Image.new("RGBA", (width, height))
+    out_pixels = new_img.load()
+    for y in range(height):
+        for x in range(width):
+            r, g, b, a = pixels[x, y]
+            if a == 0:
+                out_pixels[x, y] = (r, g, b, a)
+                continue
+            min_dist = float("inf")
+            best_c = (r, g, b)
+            if space == "lab":
+                p_lab = rgb_to_lab(r, g, b)
+                for c_lab, c_rgb in zip(palette_lab, palette_f):
+                    d = dist_sq(p_lab, c_lab)
+                    if d < min_dist:
+                        min_dist = d
+                        best_c = (int(round(c_rgb[0])), int(round(c_rgb[1])), int(round(c_rgb[2])))
+            else:
+                p = (float(r), float(g), float(b))
+                for c in palette_f:
+                    d = dist_sq(p, c)
+                    if d < min_dist:
+                        min_dist = d
+                        best_c = (int(round(c[0])), int(round(c[1])), int(round(c[2])))
+            out_pixels[x, y] = (best_c[0], best_c[1], best_c[2], a)
+
+    return new_img
+
+
+def _quantize_palette_numpy(
+    img: Image.Image, palette: Palette, space: str
+) -> Image.Image:
+    arr = np.array(img, dtype=np.uint8)
+    flat = arr.reshape(-1, 4)
+    mask = flat[:, 3] != 0
+    rgb = flat[mask, :3].astype(np.float64, copy=False)
+
+    if rgb.size == 0:
+        return img.copy()
+
+    palette_arr = np.array(palette.rgb, dtype=np.float64)
+    palette_lab = np.array(palette.lab, dtype=np.float64)
+    if space == "lab":
+        rgb = _rgb_to_lab_numpy(rgb)
+        palette_arr = palette_lab
+    chunk_size = 100_000
+    nearest = np.empty(rgb.shape[0], dtype=np.int64)
+    for start in range(0, rgb.shape[0], chunk_size):
+        end = min(start + chunk_size, rgb.shape[0])
+        chunk = rgb[start:end]
+        diff = chunk[:, None, :] - palette_arr[None, :, :]
+        dists = np.sum(diff * diff, axis=2)
+        nearest[start:end] = np.argmin(dists, axis=1)
+
+    mapped = np.rint(np.array(palette.rgb, dtype=np.float64)[nearest]).clip(0, 255).astype(np.uint8)
+    flat_out = flat.copy()
+    flat_out[mask, :3] = mapped
+    out_arr = flat_out.reshape(arr.shape)
+    return Image.fromarray(out_arr, "RGBA")
+
+
+def _rgb_to_lab_numpy(rgb: np.ndarray) -> np.ndarray:
+    rgb_f = rgb / 255.0
+    linear = np.where(
+        rgb_f <= 0.04045,
+        rgb_f / 12.92,
+        ((rgb_f + 0.055) / 1.055) ** 2.4,
+    )
+    r = linear[:, 0]
+    g = linear[:, 1]
+    b = linear[:, 2]
+
+    x = 0.4124564 * r + 0.3575761 * g + 0.1804375 * b
+    y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b
+    z = 0.0193339 * r + 0.1191920 * g + 0.9503041 * b
+
+    x /= 0.95047
+    y /= 1.0
+    z /= 1.08883
+
+    delta = 6.0 / 29.0
+    def f(t: np.ndarray) -> np.ndarray:
+        return np.where(t > delta ** 3, np.cbrt(t), (t / (3 * delta ** 2) + 4.0 / 29.0))
+
+    fx = f(x)
+    fy = f(y)
+    fz = f(z)
+
+    l = 116 * fy - 16
+    a = 500 * (fx - fy)
+    b = 200 * (fy - fz)
+    return np.stack([l, a, b], axis=1)
 
 
 def compute_profiles(img: Image.Image, config: Config) -> Tuple[List[float], List[float]]:
@@ -778,44 +983,73 @@ def parse_args(argv: Sequence[str]) -> Config:
     preview = False
     timing = False
     use_numpy = True
-    if "--preview" in args:
-        preview = True
-        args.remove("--preview")
-    if "--timing" in args:
-        timing = True
-        args.remove("--timing")
-    if "--no-numpy" in args:
-        use_numpy = False
-        args.remove("--no-numpy")
+    palette: Optional[str] = None
+    palette_space = "lab"
+    positional: List[str] = []
 
-    if len(args) < 2:
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--preview":
+            preview = True
+            i += 1
+        elif arg == "--timing":
+            timing = True
+            i += 1
+        elif arg == "--no-numpy":
+            use_numpy = False
+            i += 1
+        elif arg == "--palette":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(
+                    "Usage: python pixel_snapper.py input.png output.png [k_colors] [--palette NAME] [--palette-space rgb|lab] [--preview] [--timing] [--no-numpy]"
+                )
+            palette = args[i + 1]
+            i += 2
+        elif arg == "--palette-space":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(
+                    "Usage: python pixel_snapper.py input.png output.png [k_colors] [--palette NAME] [--palette-space rgb|lab] [--preview] [--timing] [--no-numpy]"
+                )
+            palette_space = args[i + 1].lower()
+            i += 2
+        else:
+            positional.append(arg)
+            i += 1
+
+    if palette_space not in ("rgb", "lab"):
+        raise PixelSnapperError("palette-space must be 'rgb' or 'lab'")
+
+    if len(positional) < 2:
         raise PixelSnapperError(
-            "Usage: python pixel_snapper.py input.png output.png [k_colors] [--preview] [--timing] [--no-numpy]"
+            "Usage: python pixel_snapper.py input.png output.png [k_colors] [--palette NAME] [--palette-space rgb|lab] [--preview] [--timing] [--no-numpy]"
         )
 
     config = Config(
-        input_path=args[0],
-        output_path=args[1],
+        input_path=positional[0],
+        output_path=positional[1],
         preview=preview,
         timing=timing,
         use_numpy=use_numpy,
+        palette=palette,
+        palette_space=palette_space,
     )
-    if len(args) >= 3:
+    if len(positional) >= 3:
         try:
-            k = int(args[2])
+            k = int(positional[2])
             if k > 0:
                 config.k_colors = k
             else:
                 print(
-                    f"Warning: invalid k_colors '{args[2]}', falling back to default ({config.k_colors})"
+                    f"Warning: invalid k_colors '{positional[2]}', falling back to default ({config.k_colors})"
                 )
         except ValueError:
             print(
-                f"Warning: invalid k_colors '{args[2]}', falling back to default ({config.k_colors})"
+                f"Warning: invalid k_colors '{positional[2]}', falling back to default ({config.k_colors})"
             )
-    if len(args) > 3:
+    if len(positional) > 3:
         raise PixelSnapperError(
-            "Usage: python pixel_snapper.py input.png output.png [k_colors] [--preview] [--timing] [--no-numpy]"
+            "Usage: python pixel_snapper.py input.png output.png [k_colors] [--palette NAME] [--palette-space rgb|lab] [--preview] [--timing] [--no-numpy]"
         )
 
     return config
