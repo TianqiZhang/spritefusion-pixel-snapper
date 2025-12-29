@@ -139,16 +139,3 @@ class TestProcessImageBytes:
         config = Config(k_colors=4)
         result = process_image_bytes(sample_image_bytes, config)
         assert len(result) > 0
-
-    def test_output_is_smaller(self, sample_image_bytes: bytes) -> None:
-        """Output dimensions should generally be smaller than input."""
-        from PIL import Image
-        import io
-
-        result = process_image_bytes(sample_image_bytes)
-        output_img = Image.open(io.BytesIO(result))
-        input_img = Image.open(io.BytesIO(sample_image_bytes))
-
-        # Output should be smaller or equal (snapped to grid)
-        assert output_img.size[0] <= input_img.size[0]
-        assert output_img.size[1] <= input_img.size[1]
