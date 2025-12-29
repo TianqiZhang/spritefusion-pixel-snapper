@@ -30,6 +30,15 @@ from .cli import (
     process_image_bytes_with_grid,
 )
 from .config import Config, PixelSnapperError
+from .grid import (
+    estimate_step_size_autocorr,
+    find_best_offset,
+)
+from .scoring import (
+    score_grid_uniformity,
+    score_edge_alignment,
+    select_best_grid,
+)
 
 __all__ = [
     "Config",
@@ -39,6 +48,12 @@ __all__ = [
     "process_image",
     "process_image_bytes",
     "process_image_bytes_with_grid",
+    # Enhanced grid detection
+    "estimate_step_size_autocorr",
+    "find_best_offset",
+    "score_grid_uniformity",
+    "score_edge_alignment",
+    "select_best_grid",
 ]
 
 __version__ = "1.0.0"

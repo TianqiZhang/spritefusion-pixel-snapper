@@ -4,7 +4,226 @@ from __future__ import annotations
 import math
 from typing import List, Optional, Sequence, Tuple
 
+import numpy as np
+
 from .config import Config, PixelSnapperError
+
+
+def estimate_step_size_autocorr(
+    profile: Sequence[float], config: Config
+) -> Tuple[Optional[float], float]:
+    """Estimate grid cell size using autocorrelation.
+
+    Uses FFT-based autocorrelation to find the dominant periodic pattern
+    in the gradient profile. More robust to noise than peak-spacing.
+
+    Args:
+        profile: Gradient profile values.
+        config: Configuration options.
+
+    Returns:
+        Tuple of (estimated step size or None, confidence score 0-1).
+    """
+    if len(profile) < 8:
+        return None, 0.0
+
+    arr = np.array(profile, dtype=np.float64)
+
+    # Remove DC component (mean)
+    arr = arr - arr.mean()
+
+    # Handle zero-variance profiles
+    if np.std(arr) < 1e-10:
+        return None, 0.0
+
+    # Compute autocorrelation via FFT (much faster than naive O(n^2))
+    n = len(arr)
+    # Pad to next power of 2 for FFT efficiency
+    fft_size = 1 << (2 * n - 1).bit_length()
+    fft = np.fft.fft(arr, n=fft_size)
+    autocorr = np.fft.ifft(fft * np.conj(fft)).real[:n]
+
+    # Normalize by zero-lag value
+    if autocorr[0] > 0:
+        autocorr = autocorr / autocorr[0]
+    else:
+        return None, 0.0
+
+    # Search for first significant peak after minimum lag
+    min_lag = max(config.peak_distance_filter, 3)
+    max_lag = n // 2
+
+    if max_lag <= min_lag:
+        return None, 0.0
+
+    search_region = autocorr[min_lag:max_lag]
+    if len(search_region) < 3:
+        return None, 0.0
+
+    # Find peaks in autocorrelation (local maxima above threshold)
+    peaks: List[Tuple[int, float]] = []
+    for i in range(1, len(search_region) - 1):
+        if (
+            search_region[i] > search_region[i - 1]
+            and search_region[i] > search_region[i + 1]
+            and search_region[i] > config.autocorr_min_confidence
+        ):
+            peaks.append((i + min_lag, search_region[i]))
+
+    if not peaks:
+        return None, 0.0
+
+    # Return the first (smallest lag) significant peak
+    # This represents the fundamental period
+    best_lag, confidence = peaks[0]
+
+    # Refine peak position with parabolic interpolation
+    if min_lag < best_lag < n - 1:
+        y0 = autocorr[best_lag - 1]
+        y1 = autocorr[best_lag]
+        y2 = autocorr[best_lag + 1]
+        denom = 2 * (2 * y1 - y0 - y2)
+        if abs(denom) > 1e-10:
+            offset = (y0 - y2) / denom
+            best_lag = best_lag + offset
+
+    return float(best_lag), float(confidence)
+
+
+def find_best_offset(
+    profile: Sequence[float], step_size: float, limit: int, config: Config
+) -> int:
+    """Find the grid offset that maximizes edge alignment.
+
+    AI-generated pixel art often has margins or borders. This function
+    tests different starting offsets and returns the one where grid
+    lines best align with detected edges.
+
+    Args:
+        profile: Gradient profile values.
+        step_size: Estimated step size.
+        limit: Maximum position (image dimension).
+        config: Configuration options.
+
+    Returns:
+        Best starting offset (0 to step_size-1).
+    """
+    if step_size <= 1 or not profile:
+        return 0
+
+    # Search within the step size (offsets 0 to step_size-1 are valid)
+    # We search up to offset_search_fraction of the step, but at least
+    # a reasonable range to catch common margin sizes
+    min_search = min(int(step_size), 8)  # At least check first 8 pixels
+    search_range = min(
+        max(int(step_size * config.offset_search_fraction) + 1, min_search),
+        int(step_size),
+        limit // 4,
+    )
+
+    if search_range <= 1:
+        return 0
+
+    arr = np.array(profile, dtype=np.float64)
+    best_score = -1.0
+    best_offset = 0
+
+    for offset in range(search_range):
+        score = 0.0
+        count = 0
+        pos = float(offset)
+
+        while pos < limit:
+            # Sample gradient at expected grid positions
+            idx = int(round(pos))
+            if 0 <= idx < len(arr):
+                # Weight by position certainty (higher weight near exact positions)
+                frac = abs(pos - idx)
+                weight = 1.0 - frac
+                score += arr[idx] * weight
+                count += 1
+            pos += step_size
+
+        # Normalize by number of samples
+        if count > 0:
+            score /= count
+
+        if score > best_score:
+            best_score = score
+            best_offset = offset
+
+    return best_offset
+
+
+def walk_with_offset(
+    profile: Sequence[float],
+    step_size: float,
+    limit: int,
+    offset: int,
+    config: Config,
+) -> List[int]:
+    """Walk through profile placing grid cuts, starting from an offset.
+
+    Similar to walk() but starts from a specified offset position
+    to handle images with margins.
+
+    Args:
+        profile: Gradient profile values.
+        step_size: Expected step size.
+        limit: Maximum position (image dimension).
+        offset: Starting offset position.
+        config: Configuration options.
+
+    Returns:
+        List of cut positions.
+
+    Raises:
+        PixelSnapperError: If profile is empty.
+    """
+    if not profile:
+        raise PixelSnapperError("Cannot walk on empty profile")
+
+    cuts = [0]  # Always include 0
+    if offset > 0:
+        cuts.append(offset)
+
+    current_pos = float(offset)
+    search_window = max(
+        step_size * config.walker_search_window_ratio,
+        config.walker_min_search_window,
+    )
+    mean_val = sum(profile) / float(len(profile))
+
+    while current_pos < float(limit):
+        target = current_pos + step_size
+        if target >= float(limit):
+            cuts.append(limit)
+            break
+
+        start_search = max(int(target - search_window), int(current_pos + 1.0))
+        end_search = min(int(target + search_window), limit)
+
+        if end_search <= start_search:
+            current_pos = target
+            continue
+
+        # Find maximum gradient in search window
+        max_val = -1.0
+        max_idx = start_search
+        for i in range(start_search, end_search):
+            if profile[i] > max_val:
+                max_val = profile[i]
+                max_idx = i
+
+        # Snap to edge if strong enough, otherwise use target
+        if max_val > mean_val * config.walker_strength_threshold:
+            cuts.append(max_idx)
+            current_pos = float(max_idx)
+        else:
+            cuts.append(int(target))
+            current_pos = target
+
+    return cuts
 
 
 def estimate_step_size(

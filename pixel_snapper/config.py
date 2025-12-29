@@ -33,6 +33,14 @@ class Config:
     palette: Optional[str] = None
     palette_space: str = "lab"
 
+    # Enhanced grid detection options
+    use_autocorrelation: bool = True
+    autocorr_min_confidence: float = 0.3
+    detect_grid_offset: bool = True
+    offset_search_fraction: float = 0.25
+    use_uniformity_scoring: bool = True
+    uniformity_candidate_steps: tuple = (8, 16, 32, 64)
+
 
 def validate_image_dimensions(width: int, height: int) -> None:
     """Validate image dimensions are within acceptable bounds.
