@@ -203,6 +203,8 @@ class TestBackwardCompatibility:
         assert hasattr(ps, "Config")
         assert hasattr(ps, "PixelSnapperError")
         assert hasattr(ps, "process_image_bytes")
+        assert hasattr(ps, "process_image_bytes_with_grid")
+        assert hasattr(ps, "ProcessingResult")
         assert hasattr(ps, "main")
 
     def test_config_from_root(self) -> None:
@@ -218,6 +220,55 @@ class TestBackwardCompatibility:
 
         error = PixelSnapperError("test")
         assert str(error) == "test"
+
+
+class TestProcessingWithGrid:
+    """Tests for process_image_bytes_with_grid function."""
+
+    def test_returns_processing_result(
+        self, sample_image_bytes: bytes
+    ) -> None:
+        """Should return ProcessingResult with grid info."""
+        from pixel_snapper import process_image_bytes_with_grid, ProcessingResult
+
+        result = process_image_bytes_with_grid(sample_image_bytes)
+
+        assert isinstance(result, ProcessingResult)
+        assert isinstance(result.output_bytes, bytes)
+        assert isinstance(result.col_cuts, list)
+        assert isinstance(result.row_cuts, list)
+
+    def test_grid_cuts_are_valid(self, sample_image_bytes: bytes) -> None:
+        """Grid cuts should be sorted and include boundaries."""
+        from pixel_snapper import process_image_bytes_with_grid
+
+        result = process_image_bytes_with_grid(sample_image_bytes)
+
+        # Cuts should be sorted
+        assert result.col_cuts == sorted(result.col_cuts)
+        assert result.row_cuts == sorted(result.row_cuts)
+
+        # Should start at 0
+        assert result.col_cuts[0] == 0
+        assert result.row_cuts[0] == 0
+
+        # Should have at least 2 cuts (start and end)
+        assert len(result.col_cuts) >= 2
+        assert len(result.row_cuts) >= 2
+
+    def test_output_dimensions_match_grid(
+        self, sample_image_bytes: bytes
+    ) -> None:
+        """Output image dimensions should match grid cells."""
+        from pixel_snapper import process_image_bytes_with_grid
+
+        result = process_image_bytes_with_grid(sample_image_bytes)
+        output_img = Image.open(io.BytesIO(result.output_bytes))
+
+        expected_w = len(result.col_cuts) - 1
+        expected_h = len(result.row_cuts) - 1
+
+        assert output_img.size == (expected_w, expected_h)
 
 
 class TestTimingOutput:
