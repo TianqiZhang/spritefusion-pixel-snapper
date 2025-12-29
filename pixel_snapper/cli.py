@@ -16,17 +16,47 @@ from .grid import (
     find_best_offset,
     resolve_step_sizes,
     stabilize_both_axes,
-    walk,
     walk_with_offset,
 )
 from .profile import compute_profiles
 from .quantize import quantize_image
 from .resample import resample
-from .scoring import (
-    generate_uniform_cuts,
-    score_grid_uniformity,
-    select_best_grid,
-)
+from .scoring import select_best_grid
+
+
+def _detect_grid_cuts(
+    profile_x: Sequence[float],
+    profile_y: Sequence[float],
+    step_x: float,
+    step_y: float,
+    width: int,
+    height: int,
+    config: Config,
+) -> Tuple[List[int], List[int]]:
+    """Generate grid cuts with optional offset detection.
+
+    Args:
+        profile_x: Column gradient profile.
+        profile_y: Row gradient profile.
+        step_x: Step size for columns.
+        step_y: Step size for rows.
+        width: Image width.
+        height: Image height.
+        config: Configuration options.
+
+    Returns:
+        Tuple of (column_cuts, row_cuts).
+    """
+    if config.detect_grid_offset:
+        offset_x = find_best_offset(profile_x, step_x, width, config)
+        offset_y = find_best_offset(profile_y, step_y, height, config)
+    else:
+        offset_x = 0
+        offset_y = 0
+
+    col_cuts = walk_with_offset(profile_x, step_x, width, offset_x, config)
+    row_cuts = walk_with_offset(profile_y, step_y, height, offset_y, config)
+    return col_cuts, row_cuts
 
 
 @dataclass
@@ -108,19 +138,14 @@ def process_image_bytes_with_grid(
     if config.use_uniformity_scoring:
         candidates: List[Tuple[List[int], List[int], float]] = []
 
-        # Candidate 1: Autocorrelation-based with offset detection
+        # Candidate 1: Autocorrelation-based detection
         if step_x_autocorr is not None or step_y_autocorr is not None:
             ac_step_x, ac_step_y = resolve_step_sizes(
                 step_x_autocorr, step_y_autocorr, width, height, config
             )
-            if config.detect_grid_offset:
-                offset_x = find_best_offset(profile_x, ac_step_x, width, config)
-                offset_y = find_best_offset(profile_y, ac_step_y, height, config)
-                ac_col_cuts = walk_with_offset(profile_x, ac_step_x, width, offset_x, config)
-                ac_row_cuts = walk_with_offset(profile_y, ac_step_y, height, offset_y, config)
-            else:
-                ac_col_cuts = walk(profile_x, ac_step_x, width, config)
-                ac_row_cuts = walk(profile_y, ac_step_y, height, config)
+            ac_col_cuts, ac_row_cuts = _detect_grid_cuts(
+                profile_x, profile_y, ac_step_x, ac_step_y, width, height, config
+            )
             candidates.append((ac_col_cuts, ac_row_cuts, ac_step_x))
 
         # Candidate 2: Traditional peak-based detection
@@ -128,31 +153,19 @@ def process_image_bytes_with_grid(
             pk_step_x, pk_step_y = resolve_step_sizes(
                 step_x_peaks, step_y_peaks, width, height, config
             )
-            if config.detect_grid_offset:
-                offset_x = find_best_offset(profile_x, pk_step_x, width, config)
-                offset_y = find_best_offset(profile_y, pk_step_y, height, config)
-                pk_col_cuts = walk_with_offset(profile_x, pk_step_x, width, offset_x, config)
-                pk_row_cuts = walk_with_offset(profile_y, pk_step_y, height, offset_y, config)
-            else:
-                pk_col_cuts = walk(profile_x, pk_step_x, width, config)
-                pk_row_cuts = walk(profile_y, pk_step_y, height, config)
+            pk_col_cuts, pk_row_cuts = _detect_grid_cuts(
+                profile_x, profile_y, pk_step_x, pk_step_y, width, height, config
+            )
             candidates.append((pk_col_cuts, pk_row_cuts, pk_step_x))
 
         # Candidate 3-N: Common cell sizes
         for candidate_step in config.uniformity_candidate_steps:
             if candidate_step < min(width, height) / 2:
-                if config.detect_grid_offset:
-                    offset_x = find_best_offset(profile_x, float(candidate_step), width, config)
-                    offset_y = find_best_offset(profile_y, float(candidate_step), height, config)
-                    cand_col_cuts = walk_with_offset(
-                        profile_x, float(candidate_step), width, offset_x, config
-                    )
-                    cand_row_cuts = walk_with_offset(
-                        profile_y, float(candidate_step), height, offset_y, config
-                    )
-                else:
-                    cand_col_cuts = walk(profile_x, float(candidate_step), width, config)
-                    cand_row_cuts = walk(profile_y, float(candidate_step), height, config)
+                cand_col_cuts, cand_row_cuts = _detect_grid_cuts(
+                    profile_x, profile_y,
+                    float(candidate_step), float(candidate_step),
+                    width, height, config
+                )
                 candidates.append((cand_col_cuts, cand_row_cuts, float(candidate_step)))
 
         # Remove duplicate candidates (same grid result)
@@ -170,19 +183,14 @@ def process_image_bytes_with_grid(
                 quantized, profile_x, profile_y, unique_candidates, width, height
             )
         else:
-            # Fallback to standard detection
-            raw_col_cuts = walk(profile_x, step_x, width, config)
-            raw_row_cuts = walk(profile_y, step_y, height, config)
+            raw_col_cuts, raw_row_cuts = _detect_grid_cuts(
+                profile_x, profile_y, step_x, step_y, width, height, config
+            )
     else:
-        # Original behavior: single detection path
-        if config.detect_grid_offset:
-            offset_x = find_best_offset(profile_x, step_x, width, config)
-            offset_y = find_best_offset(profile_y, step_y, height, config)
-            raw_col_cuts = walk_with_offset(profile_x, step_x, width, offset_x, config)
-            raw_row_cuts = walk_with_offset(profile_y, step_y, height, offset_y, config)
-        else:
-            raw_col_cuts = walk(profile_x, step_x, width, config)
-            raw_row_cuts = walk(profile_y, step_y, height, config)
+        # Single detection path
+        raw_col_cuts, raw_row_cuts = _detect_grid_cuts(
+            profile_x, profile_y, step_x, step_y, width, height, config
+        )
     t5 = time.perf_counter()
 
     col_cuts, row_cuts = stabilize_both_axes(

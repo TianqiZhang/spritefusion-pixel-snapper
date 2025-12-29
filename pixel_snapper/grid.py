@@ -343,47 +343,7 @@ def walk(
     Raises:
         PixelSnapperError: If profile is empty.
     """
-    if not profile:
-        raise PixelSnapperError("Cannot walk on empty profile")
-
-    cuts = [0]
-    current_pos = 0.0
-    search_window = max(
-        step_size * config.walker_search_window_ratio,
-        config.walker_min_search_window,
-    )
-    mean_val = sum(profile) / float(len(profile))
-
-    while current_pos < float(limit):
-        target = current_pos + step_size
-        if target >= float(limit):
-            cuts.append(limit)
-            break
-
-        start_search = max(int(target - search_window), int(current_pos + 1.0))
-        end_search = min(int(target + search_window), limit)
-
-        if end_search <= start_search:
-            current_pos = target
-            continue
-
-        # Find maximum gradient in search window
-        max_val = -1.0
-        max_idx = start_search
-        for i in range(start_search, end_search):
-            if profile[i] > max_val:
-                max_val = profile[i]
-                max_idx = i
-
-        # Snap to edge if strong enough, otherwise use target
-        if max_val > mean_val * config.walker_strength_threshold:
-            cuts.append(max_idx)
-            current_pos = float(max_idx)
-        else:
-            cuts.append(int(target))
-            current_pos = target
-
-    return cuts
+    return walk_with_offset(profile, step_size, limit, 0, config)
 
 
 def sanitize_cuts(cuts: List[int], limit: int) -> List[int]:

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import random
-from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
@@ -10,9 +9,6 @@ from PIL import Image
 from .color import rgb_to_lab
 from .config import Config, PixelSnapperError
 from .palette import Palette, load_palette
-
-if TYPE_CHECKING:
-    pass
 
 
 def quantize_image(img: Image.Image, config: Config) -> Image.Image:

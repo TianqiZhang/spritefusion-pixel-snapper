@@ -114,37 +114,6 @@ def score_edge_alignment(
     return total_strength / count
 
 
-def evaluate_grid_candidate(
-    img: Image.Image,
-    profile_x: Sequence[float],
-    profile_y: Sequence[float],
-    col_cuts: List[int],
-    row_cuts: List[int],
-    width: int,
-    height: int,
-) -> Tuple[float, float, float]:
-    """Evaluate a grid candidate on multiple criteria.
-
-    Args:
-        img: Input RGBA image.
-        profile_x: Column gradient profile.
-        profile_y: Row gradient profile.
-        col_cuts: Column cut positions.
-        row_cuts: Row cut positions.
-        width: Image width.
-        height: Image height.
-
-    Returns:
-        Tuple of (uniformity_score, edge_score_x, edge_score_y).
-        For uniformity, lower is better. For edge scores, higher is better.
-    """
-    uniformity = score_grid_uniformity(img, col_cuts, row_cuts)
-    edge_x = score_edge_alignment(profile_x, col_cuts, width)
-    edge_y = score_edge_alignment(profile_y, row_cuts, height)
-
-    return uniformity, edge_x, edge_y
-
-
 def select_best_grid(
     img: Image.Image,
     profile_x: Sequence[float],
@@ -185,9 +154,9 @@ def select_best_grid(
     # Compute scores for all candidates
     all_scores: List[Tuple[float, float, float]] = []
     for col_cuts, row_cuts, _ in candidates:
-        uniformity, edge_x, edge_y = evaluate_grid_candidate(
-            img, profile_x, profile_y, col_cuts, row_cuts, width, height
-        )
+        uniformity = score_grid_uniformity(img, col_cuts, row_cuts)
+        edge_x = score_edge_alignment(profile_x, col_cuts, width)
+        edge_y = score_edge_alignment(profile_y, row_cuts, height)
         all_scores.append((uniformity, edge_x, edge_y))
 
     # Normalize scores for fair comparison
@@ -228,34 +197,3 @@ def select_best_grid(
             best_candidate = (col_cuts, row_cuts, step_size)
 
     return best_candidate
-
-
-def generate_uniform_cuts(step_size: float, limit: int) -> List[int]:
-    """Generate uniform grid cuts for a given step size.
-
-    Args:
-        step_size: Target step size.
-        limit: Maximum position.
-
-    Returns:
-        List of cut positions including 0 and limit.
-    """
-    if step_size <= 0 or limit <= 0:
-        return [0, limit] if limit > 0 else [0]
-
-    cuts = [0]
-    pos = step_size
-    while pos < limit:
-        cuts.append(int(round(pos)))
-        pos += step_size
-    cuts.append(limit)
-
-    # Remove duplicates while preserving order
-    seen = set()
-    result = []
-    for c in cuts:
-        if c not in seen:
-            seen.add(c)
-            result.append(c)
-
-    return result

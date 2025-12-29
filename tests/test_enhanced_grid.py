@@ -13,7 +13,6 @@ from pixel_snapper.scoring import (
     score_grid_uniformity,
     score_edge_alignment,
     select_best_grid,
-    generate_uniform_cuts,
 )
 
 
@@ -322,34 +321,6 @@ class TestSelectBestGrid:
         # Should return fallback
         assert 0 in col_cuts
         assert 8 in col_cuts
-
-
-class TestGenerateUniformCuts:
-    """Tests for generating uniform grid cuts."""
-
-    def test_basic_uniform_grid(self):
-        """Test basic uniform grid generation."""
-        cuts = generate_uniform_cuts(10.0, 100)
-        assert cuts[0] == 0
-        assert cuts[-1] == 100
-        assert len(cuts) == 11  # 0, 10, 20, ..., 100
-
-    def test_non_divisible_size(self):
-        """Test when step doesn't divide evenly."""
-        cuts = generate_uniform_cuts(15.0, 100)
-        assert cuts[0] == 0
-        assert cuts[-1] == 100
-
-    def test_zero_step(self):
-        """Test handles zero step size."""
-        cuts = generate_uniform_cuts(0.0, 100)
-        assert 0 in cuts
-        assert 100 in cuts
-
-    def test_zero_limit(self):
-        """Test handles zero limit."""
-        cuts = generate_uniform_cuts(10.0, 0)
-        assert cuts == [0]
 
 
 class TestIntegrationEnhancedDetection:
