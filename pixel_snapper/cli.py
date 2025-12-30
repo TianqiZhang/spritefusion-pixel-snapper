@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import io
+import logging
 import sys
 import time
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
 from PIL import Image, ImageDraw
+
+logger = logging.getLogger("pixel_snapper")
 
 from .config import Config, PixelSnapperError, validate_image_dimensions
 from .grid import (
@@ -118,6 +121,12 @@ def process_image_bytes_with_grid(
     if config.use_autocorrelation:
         step_x_autocorr, conf_x = estimate_step_size_autocorr(profile_x, config)
         step_y_autocorr, conf_y = estimate_step_size_autocorr(profile_y, config)
+        logger.debug(
+            f"Autocorrelation: step_x={step_x_autocorr:.2f} (conf={conf_x:.2f}), "
+            f"step_y={step_y_autocorr:.2f} (conf={conf_y:.2f})"
+            if step_x_autocorr and step_y_autocorr
+            else f"Autocorrelation: step_x={step_x_autocorr}, step_y={step_y_autocorr}"
+        )
     else:
         step_x_autocorr, conf_x = None, 0.0
         step_y_autocorr, conf_y = None, 0.0
@@ -125,6 +134,7 @@ def process_image_bytes_with_grid(
     # Also get traditional peak-based estimates
     step_x_peaks = estimate_step_size(profile_x, config)
     step_y_peaks = estimate_step_size(profile_y, config)
+    logger.debug(f"Peak-based: step_x={step_x_peaks}, step_y={step_y_peaks}")
 
     # Prefer autocorrelation if confident, else fall back to peaks
     step_x_opt = step_x_autocorr if conf_x >= config.autocorr_min_confidence else step_x_peaks
@@ -133,21 +143,27 @@ def process_image_bytes_with_grid(
     step_x, step_y = resolve_step_sizes(
         step_x_opt, step_y_opt, width, height, config
     )
+    logger.debug(f"Resolved step size: {step_x:.2f}x{step_y:.2f}")
     t4 = time.perf_counter()
 
     # Build candidate grids if uniformity scoring is enabled
     if config.use_uniformity_scoring:
-        candidates: List[Tuple[List[int], List[int], float]] = []
+        # Track candidates with their source for logging
+        candidates_with_source: List[Tuple[List[int], List[int], float, str]] = []
 
         # When resolution hint is provided, get multiple autocorrelation peaks
         if config.resolution_hint and config.use_autocorrelation:
             # Get multiple peaks from autocorrelation for more candidate options
             multi_peaks_x = estimate_step_size_autocorr_multi(profile_x, config)
             multi_peaks_y = estimate_step_size_autocorr_multi(profile_y, config)
+            logger.debug(
+                f"Multi-peak autocorr: X peaks={[(f'{s:.1f}', f'{c:.2f}') for s, c in multi_peaks_x]}, "
+                f"Y peaks={[(f'{s:.1f}', f'{c:.2f}') for s, c in multi_peaks_y]}"
+            )
 
             # Add candidates from each peak combination
-            for step_x_ac, _ in multi_peaks_x:
-                for step_y_ac, _ in multi_peaks_y:
+            for step_x_ac, conf_x_ac in multi_peaks_x:
+                for step_y_ac, conf_y_ac in multi_peaks_y:
                     ac_step_x, ac_step_y = resolve_step_sizes(
                         step_x_ac, step_y_ac, width, height, config
                     )
@@ -155,7 +171,10 @@ def process_image_bytes_with_grid(
                         profile_x, profile_y, ac_step_x, ac_step_y,
                         width, height, config
                     )
-                    candidates.append((ac_col_cuts, ac_row_cuts, ac_step_x))
+                    candidates_with_source.append((
+                        ac_col_cuts, ac_row_cuts, ac_step_x,
+                        f"autocorr({step_x_ac:.1f}x{step_y_ac:.1f})"
+                    ))
 
             # Also add single-axis candidates if one axis has peaks
             for step_x_ac, _ in multi_peaks_x:
@@ -166,7 +185,10 @@ def process_image_bytes_with_grid(
                     profile_x, profile_y, ac_step_x, ac_step_y,
                     width, height, config
                 )
-                candidates.append((ac_col_cuts, ac_row_cuts, ac_step_x))
+                candidates_with_source.append((
+                    ac_col_cuts, ac_row_cuts, ac_step_x,
+                    f"autocorr-x({step_x_ac:.1f})"
+                ))
 
             for step_y_ac, _ in multi_peaks_y:
                 ac_step_x, ac_step_y = resolve_step_sizes(
@@ -176,7 +198,10 @@ def process_image_bytes_with_grid(
                     profile_x, profile_y, ac_step_x, ac_step_y,
                     width, height, config
                 )
-                candidates.append((ac_col_cuts, ac_row_cuts, ac_step_x))
+                candidates_with_source.append((
+                    ac_col_cuts, ac_row_cuts, ac_step_x,
+                    f"autocorr-y({step_y_ac:.1f})"
+                ))
         else:
             # Original single-peak autocorrelation candidate
             if step_x_autocorr is not None or step_y_autocorr is not None:
@@ -187,7 +212,9 @@ def process_image_bytes_with_grid(
                     profile_x, profile_y, ac_step_x, ac_step_y,
                     width, height, config
                 )
-                candidates.append((ac_col_cuts, ac_row_cuts, ac_step_x))
+                candidates_with_source.append((
+                    ac_col_cuts, ac_row_cuts, ac_step_x, "autocorr"
+                ))
 
         # Candidate: Traditional peak-based detection
         if step_x_peaks is not None or step_y_peaks is not None:
@@ -197,7 +224,9 @@ def process_image_bytes_with_grid(
             pk_col_cuts, pk_row_cuts = _detect_grid_cuts(
                 profile_x, profile_y, pk_step_x, pk_step_y, width, height, config
             )
-            candidates.append((pk_col_cuts, pk_row_cuts, pk_step_x))
+            candidates_with_source.append((
+                pk_col_cuts, pk_row_cuts, pk_step_x, "peak-based"
+            ))
 
         # Candidates from common cell sizes
         for candidate_step in config.uniformity_candidate_steps:
@@ -207,7 +236,10 @@ def process_image_bytes_with_grid(
                     float(candidate_step), float(candidate_step),
                     width, height, config
                 )
-                candidates.append((cand_col_cuts, cand_row_cuts, float(candidate_step)))
+                candidates_with_source.append((
+                    cand_col_cuts, cand_row_cuts, float(candidate_step),
+                    f"fixed({candidate_step})"
+                ))
 
         # Add hint-derived candidate (at the upper limit)
         if config.resolution_hint:
@@ -216,41 +248,71 @@ def process_image_bytes_with_grid(
             hint_col_cuts, hint_row_cuts = _detect_grid_cuts(
                 profile_x, profile_y, hint_step, hint_step, width, height, config
             )
-            candidates.append((hint_col_cuts, hint_row_cuts, hint_step))
+            candidates_with_source.append((
+                hint_col_cuts, hint_row_cuts, hint_step,
+                f"hint({config.resolution_hint})"
+            ))
+
+        logger.debug(f"Generated {len(candidates_with_source)} candidates before dedup")
 
         # Remove duplicate candidates (same grid result)
-        unique_candidates: List[Tuple[List[int], List[int], float]] = []
+        unique_candidates: List[Tuple[List[int], List[int], float, str]] = []
         seen_grids: set = set()
-        for col_cuts, row_cuts, step in candidates:
+        for col_cuts, row_cuts, step, source in candidates_with_source:
             grid_key = (tuple(col_cuts), tuple(row_cuts))
             if grid_key not in seen_grids:
                 seen_grids.add(grid_key)
-                unique_candidates.append((col_cuts, row_cuts, step))
+                unique_candidates.append((col_cuts, row_cuts, step, source))
+
+        logger.debug(f"After dedup: {len(unique_candidates)} unique candidates")
 
         # Filter candidates by resolution hint (upper limit)
         if config.resolution_hint:
-            filtered_candidates: List[Tuple[List[int], List[int], float]] = []
-            for col_cuts, row_cuts, step in unique_candidates:
+            filtered_candidates: List[Tuple[List[int], List[int], float, str]] = []
+            for col_cuts, row_cuts, step, source in unique_candidates:
                 cells_x = len(col_cuts) - 1
                 cells_y = len(row_cuts) - 1
                 if max(cells_x, cells_y) <= config.resolution_hint:
-                    filtered_candidates.append((col_cuts, row_cuts, step))
+                    filtered_candidates.append((col_cuts, row_cuts, step, source))
+                else:
+                    logger.debug(
+                        f"  Filtered out: {source} -> {cells_x}x{cells_y} cells "
+                        f"(exceeds hint={config.resolution_hint})"
+                    )
             unique_candidates = filtered_candidates
+            logger.debug(f"After hint filter: {len(unique_candidates)} candidates")
+
+        # Log all candidates before scoring
+        for col_cuts, row_cuts, step, source in unique_candidates:
+            cells_x = len(col_cuts) - 1
+            cells_y = len(row_cuts) - 1
+            logger.debug(f"  Candidate: {source} -> {cells_x}x{cells_y} cells (step={step:.2f})")
 
         # Select best grid using uniformity and edge alignment scoring
         if unique_candidates:
-            raw_col_cuts, raw_row_cuts, _ = select_best_grid(
-                quantized, profile_x, profile_y, unique_candidates, width, height
+            # Strip source for select_best_grid (it doesn't need it)
+            candidates_for_scoring = [
+                (col_cuts, row_cuts, step)
+                for col_cuts, row_cuts, step, source in unique_candidates
+            ]
+            raw_col_cuts, raw_row_cuts, best_idx = select_best_grid(
+                quantized, profile_x, profile_y, candidates_for_scoring, width, height
             )
+            winner_source = unique_candidates[best_idx][3]
+            cells_x = len(raw_col_cuts) - 1
+            cells_y = len(raw_row_cuts) - 1
+            logger.debug(f"Winner: {winner_source} -> {cells_x}x{cells_y} cells")
         else:
             raw_col_cuts, raw_row_cuts = _detect_grid_cuts(
                 profile_x, profile_y, step_x, step_y, width, height, config
             )
+            logger.debug("No candidates after filtering, using fallback detection")
     else:
         # Single detection path
         raw_col_cuts, raw_row_cuts = _detect_grid_cuts(
             profile_x, profile_y, step_x, step_y, width, height, config
         )
+        logger.debug("Uniformity scoring disabled, using single detection path")
     t5 = time.perf_counter()
 
     col_cuts, row_cuts = stabilize_both_axes(
@@ -469,6 +531,7 @@ def parse_args(argv: Sequence[str]) -> Config:
     args = list(argv[1:])
     preview = False
     timing = False
+    debug = False
     palette: Optional[str] = None
     palette_space = "lab"
     resolution_hint: Optional[int] = None
@@ -482,6 +545,9 @@ def parse_args(argv: Sequence[str]) -> Config:
             i += 1
         elif arg == "--timing":
             timing = True
+            i += 1
+        elif arg == "--debug":
+            debug = True
             i += 1
         elif arg == "--palette":
             if i + 1 >= len(args):
@@ -546,6 +612,14 @@ def parse_args(argv: Sequence[str]) -> Config:
     if len(positional) > 3:
         raise PixelSnapperError(_usage_message())
 
+    # Enable debug logging if requested
+    if debug:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(name)s: %(message)s"
+        )
+        logging.getLogger("pixel_snapper").setLevel(logging.DEBUG)
+
     return config
 
 
@@ -554,7 +628,7 @@ def _usage_message() -> str:
     return (
         "Usage: python pixel_snapper.py input.png output.png [k_colors] "
         "[--palette NAME] [--palette-space rgb|lab] [--resolution-hint N] "
-        "[--preview] [--timing]"
+        "[--preview] [--timing] [--debug]"
     )
 
 

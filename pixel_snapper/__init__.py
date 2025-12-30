@@ -21,7 +21,18 @@ For grid information, use process_image_bytes_with_grid:
 
     result = process_image_bytes_with_grid(input_bytes, config)
     print(f"Grid: {len(result.col_cuts)-1}x{len(result.row_cuts)-1} cells")
+
+For debug logging, enable with:
+
+    import logging
+    logging.getLogger("pixel_snapper").setLevel(logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG)
 """
+import logging
+
+# Package logger - disabled by default, enable with logging.getLogger("pixel_snapper").setLevel(logging.DEBUG)
+logger = logging.getLogger("pixel_snapper")
+logger.addHandler(logging.NullHandler())
 from .cli import (
     ProcessingResult,
     main,

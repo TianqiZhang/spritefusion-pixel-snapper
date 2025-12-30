@@ -278,12 +278,12 @@ class TestSelectBestGrid:
             ([0, 2, 4, 6, 8], [0, 2, 4, 6, 8], 2.0),  # Wrong grid
         ]
 
-        col_cuts, row_cuts, step = select_best_grid(
+        col_cuts, row_cuts, best_idx = select_best_grid(
             img, profile_x, profile_y, candidates, 8, 8
         )
 
-        # Should select the 2x2 grid (step=4) as it has better uniformity
-        assert step == 4.0
+        # Should select the 2x2 grid (index 0) as it has better uniformity
+        assert best_idx == 0
         assert col_cuts == [0, 4, 8]
 
     def test_single_candidate(self):
@@ -291,18 +291,18 @@ class TestSelectBestGrid:
         img = Image.new("RGBA", (8, 8), (255, 0, 0, 255))
         candidates = [([0, 4, 8], [0, 4, 8], 4.0)]
 
-        col_cuts, row_cuts, step = select_best_grid(
+        col_cuts, row_cuts, best_idx = select_best_grid(
             img, [0.0] * 8, [0.0] * 8, candidates, 8, 8
         )
 
         assert col_cuts == [0, 4, 8]
-        assert step == 4.0
+        assert best_idx == 0
 
     def test_empty_candidates(self):
         """Test handles empty candidate list."""
         img = Image.new("RGBA", (8, 8), (255, 0, 0, 255))
 
-        col_cuts, row_cuts, step = select_best_grid(
+        col_cuts, row_cuts, best_idx = select_best_grid(
             img, [0.0] * 8, [0.0] * 8, [], 8, 8
         )
 

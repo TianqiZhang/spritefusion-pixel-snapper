@@ -1,12 +1,15 @@
 """Grid scoring and validation algorithms."""
 from __future__ import annotations
 
+import logging
 from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 from PIL import Image
 
 from .config import Config
+
+logger = logging.getLogger("pixel_snapper")
 
 
 def score_grid_uniformity(
@@ -123,7 +126,7 @@ def select_best_grid(
     height: int,
     uniformity_weight: float = 1.0,
     edge_weight: float = 0.5,
-) -> Tuple[List[int], List[int], float]:
+) -> Tuple[List[int], List[int], int]:
     """Select the best grid from multiple candidates.
 
     Combines uniformity scoring (lower is better) with edge alignment
@@ -140,16 +143,16 @@ def select_best_grid(
         edge_weight: Weight for edge alignment score (higher is better).
 
     Returns:
-        Best (col_cuts, row_cuts, step_size) tuple.
+        Tuple of (best_col_cuts, best_row_cuts, best_index).
     """
     if not candidates:
-        return [0, width], [0, height], float(width)
+        return [0, width], [0, height], 0
 
     if len(candidates) == 1:
-        return candidates[0]
+        return candidates[0][0], candidates[0][1], 0
 
     best_score = float("-inf")
-    best_candidate = candidates[0]
+    best_idx = 0
 
     # Compute scores for all candidates
     all_scores: List[Tuple[float, float, float]] = []
@@ -173,6 +176,7 @@ def select_best_grid(
     max_edge_x = max(max_edge_x, 1e-10)
     max_edge_y = max(max_edge_y, 1e-10)
 
+    logger.debug("Scoring candidates:")
     for i, (col_cuts, row_cuts, step_size) in enumerate(candidates):
         uniformity, edge_x, edge_y = all_scores[i]
 
@@ -192,8 +196,16 @@ def select_best_grid(
             uniformity_weight * norm_uniformity + edge_weight * norm_edge
         )
 
+        cells_x = len(col_cuts) - 1
+        cells_y = len(row_cuts) - 1
+        logger.debug(
+            f"  [{i}] {cells_x}x{cells_y}: "
+            f"uniformity={uniformity:.2f} (norm={norm_uniformity:.3f}), "
+            f"edge={norm_edge:.3f}, combined={combined:.3f}"
+        )
+
         if combined > best_score:
             best_score = combined
-            best_candidate = (col_cuts, row_cuts, step_size)
+            best_idx = i
 
-    return best_candidate
+    return candidates[best_idx][0], candidates[best_idx][1], best_idx
