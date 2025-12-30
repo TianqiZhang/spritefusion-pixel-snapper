@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(python -m pytest:*)",
-      "Bash(python pixel_snapper.py:*)"
+      "Bash(python pixel_snapper.py:*)",
+      "Bash(python test_peaks.py:*)",
+      "Bash(python:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }
