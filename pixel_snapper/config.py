@@ -41,6 +41,9 @@ class Config:
     use_uniformity_scoring: bool = True
     uniformity_candidate_steps: tuple = (8, 16, 32, 64)
 
+    # Resolution hint (upper limit on cells)
+    resolution_hint: Optional[int] = None  # Max cells on long axis
+
 
 def validate_image_dimensions(width: int, height: int) -> None:
     """Validate image dimensions are within acceptable bounds.

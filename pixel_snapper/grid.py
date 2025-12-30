@@ -9,6 +9,91 @@ import numpy as np
 from .config import Config, PixelSnapperError
 
 
+def estimate_step_size_autocorr_multi(
+    profile: Sequence[float], config: Config, max_peaks: int = 5
+) -> List[Tuple[float, float]]:
+    """Estimate grid cell sizes using autocorrelation, returning multiple candidates.
+
+    Uses FFT-based autocorrelation to find periodic patterns in the gradient
+    profile. Returns multiple peaks to provide more candidates for grid selection,
+    useful when a resolution hint constrains the valid cell counts.
+
+    Args:
+        profile: Gradient profile values.
+        config: Configuration options.
+        max_peaks: Maximum number of peaks to return.
+
+    Returns:
+        List of (step_size, confidence) tuples, sorted by confidence descending.
+    """
+    if len(profile) < 8:
+        return []
+
+    arr = np.array(profile, dtype=np.float64)
+
+    # Remove DC component (mean)
+    arr = arr - arr.mean()
+
+    # Handle zero-variance profiles
+    if np.std(arr) < 1e-10:
+        return []
+
+    # Compute autocorrelation via FFT (much faster than naive O(n^2))
+    n = len(arr)
+    fft_size = 1 << (2 * n - 1).bit_length()
+    fft = np.fft.fft(arr, n=fft_size)
+    autocorr = np.fft.ifft(fft * np.conj(fft)).real[:n]
+
+    # Normalize by zero-lag value
+    if autocorr[0] > 0:
+        autocorr = autocorr / autocorr[0]
+    else:
+        return []
+
+    # Search for peaks after minimum lag
+    min_lag = max(config.peak_distance_filter, 3)
+    max_lag = n // 2
+
+    if max_lag <= min_lag:
+        return []
+
+    search_region = autocorr[min_lag:max_lag]
+    if len(search_region) < 3:
+        return []
+
+    # Find all peaks in autocorrelation (local maxima above threshold)
+    peaks: List[Tuple[int, float]] = []
+    for i in range(1, len(search_region) - 1):
+        if (
+            search_region[i] > search_region[i - 1]
+            and search_region[i] > search_region[i + 1]
+            and search_region[i] > config.autocorr_min_confidence
+        ):
+            peaks.append((i + min_lag, search_region[i]))
+
+    if not peaks:
+        return []
+
+    # Sort by confidence descending
+    peaks.sort(key=lambda x: x[1], reverse=True)
+
+    # Refine peak positions with parabolic interpolation and return top N
+    results: List[Tuple[float, float]] = []
+    for lag, confidence in peaks[:max_peaks]:
+        refined_lag = float(lag)
+        if min_lag < lag < n - 1:
+            y0 = autocorr[lag - 1]
+            y1 = autocorr[lag]
+            y2 = autocorr[lag + 1]
+            denom = 2 * (2 * y1 - y0 - y2)
+            if abs(denom) > 1e-10:
+                offset = (y0 - y2) / denom
+                refined_lag = lag + offset
+        results.append((refined_lag, float(confidence)))
+
+    return results
+
+
 def estimate_step_size_autocorr(
     profile: Sequence[float], config: Config
 ) -> Tuple[Optional[float], float]:
@@ -24,70 +109,10 @@ def estimate_step_size_autocorr(
     Returns:
         Tuple of (estimated step size or None, confidence score 0-1).
     """
-    if len(profile) < 8:
+    results = estimate_step_size_autocorr_multi(profile, config, max_peaks=1)
+    if not results:
         return None, 0.0
-
-    arr = np.array(profile, dtype=np.float64)
-
-    # Remove DC component (mean)
-    arr = arr - arr.mean()
-
-    # Handle zero-variance profiles
-    if np.std(arr) < 1e-10:
-        return None, 0.0
-
-    # Compute autocorrelation via FFT (much faster than naive O(n^2))
-    n = len(arr)
-    # Pad to next power of 2 for FFT efficiency
-    fft_size = 1 << (2 * n - 1).bit_length()
-    fft = np.fft.fft(arr, n=fft_size)
-    autocorr = np.fft.ifft(fft * np.conj(fft)).real[:n]
-
-    # Normalize by zero-lag value
-    if autocorr[0] > 0:
-        autocorr = autocorr / autocorr[0]
-    else:
-        return None, 0.0
-
-    # Search for first significant peak after minimum lag
-    min_lag = max(config.peak_distance_filter, 3)
-    max_lag = n // 2
-
-    if max_lag <= min_lag:
-        return None, 0.0
-
-    search_region = autocorr[min_lag:max_lag]
-    if len(search_region) < 3:
-        return None, 0.0
-
-    # Find peaks in autocorrelation (local maxima above threshold)
-    peaks: List[Tuple[int, float]] = []
-    for i in range(1, len(search_region) - 1):
-        if (
-            search_region[i] > search_region[i - 1]
-            and search_region[i] > search_region[i + 1]
-            and search_region[i] > config.autocorr_min_confidence
-        ):
-            peaks.append((i + min_lag, search_region[i]))
-
-    if not peaks:
-        return None, 0.0
-
-    # Return the first (smallest lag) significant peak
-    # This represents the fundamental period
-    best_lag, confidence = peaks[0]
-
-    # Refine peak position with parabolic interpolation
-    if min_lag < best_lag < n - 1:
-        y0 = autocorr[best_lag - 1]
-        y1 = autocorr[best_lag]
-        y2 = autocorr[best_lag + 1]
-        denom = 2 * (2 * y1 - y0 - y2)
-        if abs(denom) > 1e-10:
-            offset = (y0 - y2) / denom
-            best_lag = best_lag + offset
-
-    return float(best_lag), float(confidence)
+    return results[0]
 
 
 def find_best_offset(
@@ -162,9 +187,10 @@ def walk_with_offset(
     offset: int,
     config: Config,
 ) -> List[int]:
-    """Walk through profile placing grid cuts, starting from an offset.
+    """Walk through profile placing grid cuts at edge peaks.
 
-    Similar to walk() but starts from a specified offset position
+    Uses an elastic approach that snaps to strong edges within a search
+    window around the expected position. Starts from a specified offset
     to handle images with margins.
 
     Args:
@@ -321,29 +347,6 @@ def resolve_step_sizes(
         min(width, height) / float(config.fallback_target_segments), 1.0
     )
     return fallback_step, fallback_step
-
-
-def walk(
-    profile: Sequence[float], step_size: float, limit: int, config: Config
-) -> List[int]:
-    """Walk through profile placing grid cuts at edge peaks.
-
-    Uses an elastic approach that snaps to strong edges within
-    a search window around the expected position.
-
-    Args:
-        profile: Gradient profile values.
-        step_size: Expected step size.
-        limit: Maximum position (image dimension).
-        config: Configuration options.
-
-    Returns:
-        List of cut positions.
-
-    Raises:
-        PixelSnapperError: If profile is empty.
-    """
-    return walk_with_offset(profile, step_size, limit, 0, config)
 
 
 def sanitize_cuts(cuts: List[int], limit: int) -> List[int]:

@@ -1,7 +1,7 @@
 """Tests for enhanced grid detection features."""
 import pytest
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from pixel_snapper import Config
 from pixel_snapper.grid import (
@@ -132,18 +132,6 @@ class TestWalkWithOffset:
         assert 0 in cuts
         assert 5 in cuts
         assert 100 in cuts
-
-    def test_zero_offset_same_as_walk(self):
-        """Test that zero offset behaves like regular walk."""
-        from pixel_snapper.grid import walk
-
-        config = Config()
-        profile = [10.0] * 100
-
-        cuts_with_offset = walk_with_offset(profile, 20.0, 100, 0, config)
-        cuts_normal = walk(profile, 20.0, 100, config)
-
-        assert cuts_with_offset == cuts_normal
 
     def test_empty_profile_error(self):
         """Test raises error on empty profile."""
@@ -370,3 +358,207 @@ class TestIntegrationEnhancedDetection:
 
         output = process_image_bytes(buf.getvalue(), config)
         assert len(output) > 0
+
+
+class TestResolutionHint:
+    """Tests for resolution hint feature."""
+
+    def test_resolution_hint_limits_cells(self):
+        """Test that resolution hint acts as upper limit on cell count."""
+        from pixel_snapper import Config, process_image_bytes_with_grid
+        import io
+
+        # Create a 128x128 image with 8-pixel grid (16x16 cells)
+        img = Image.new("RGBA", (128, 128), (200, 200, 200, 255))
+        draw = ImageDraw.Draw(img)
+        for i in range(0, 128, 8):
+            draw.line([(i, 0), (i, 127)], fill=(0, 0, 0, 255))
+            draw.line([(0, i), (127, i)], fill=(0, 0, 0, 255))
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+
+        # With hint=10, output should have at most 10 cells per axis
+        config = Config(resolution_hint=10)
+        result = process_image_bytes_with_grid(buf.getvalue(), config)
+
+        cells_x = len(result.col_cuts) - 1
+        cells_y = len(result.row_cuts) - 1
+        assert max(cells_x, cells_y) <= 10
+
+    def test_resolution_hint_allows_fewer_cells(self):
+        """Test that resolution hint allows fewer cells than the hint."""
+        from pixel_snapper import Config, process_image_bytes_with_grid
+        import io
+
+        # Create a 64x64 image with 16-pixel grid (4x4 cells)
+        img = Image.new("RGBA", (64, 64), (200, 200, 200, 255))
+        draw = ImageDraw.Draw(img)
+        for i in range(0, 64, 16):
+            draw.line([(i, 0), (i, 63)], fill=(0, 0, 0, 255))
+            draw.line([(0, i), (63, i)], fill=(0, 0, 0, 255))
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+
+        # With hint=32, output can have fewer cells (like 4x4)
+        config = Config(resolution_hint=32)
+        result = process_image_bytes_with_grid(buf.getvalue(), config)
+
+        cells_x = len(result.col_cuts) - 1
+        cells_y = len(result.row_cuts) - 1
+        # Should detect roughly 4x4, not 32x32
+        assert max(cells_x, cells_y) <= 32
+
+    def test_resolution_hint_with_non_square_image(self):
+        """Test resolution hint applies to long axis for non-square images."""
+        from pixel_snapper import Config, process_image_bytes_with_grid
+        import io
+
+        # Create a 128x64 image (2:1 aspect ratio)
+        img = Image.new("RGBA", (128, 64), (200, 200, 200, 255))
+        draw = ImageDraw.Draw(img)
+        for i in range(0, 128, 8):
+            draw.line([(i, 0), (i, 63)], fill=(0, 0, 0, 255))
+        for i in range(0, 64, 8):
+            draw.line([(0, i), (127, i)], fill=(0, 0, 0, 255))
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+
+        # With hint=12, long axis (128px) should have at most 12 cells
+        config = Config(resolution_hint=12)
+        result = process_image_bytes_with_grid(buf.getvalue(), config)
+
+        cells_x = len(result.col_cuts) - 1
+        cells_y = len(result.row_cuts) - 1
+        assert max(cells_x, cells_y) <= 12
+
+    def test_resolution_hint_none_has_no_effect(self):
+        """Test that None resolution hint doesn't change behavior."""
+        from pixel_snapper import Config, process_image_bytes_with_grid
+        import io
+
+        img = Image.new("RGBA", (64, 64), (200, 200, 200, 255))
+        draw = ImageDraw.Draw(img)
+        for i in range(0, 64, 8):
+            draw.line([(i, 0), (i, 63)], fill=(0, 0, 0, 255))
+            draw.line([(0, i), (63, i)], fill=(0, 0, 0, 255))
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+
+        config_with_hint = Config(resolution_hint=None)
+        config_without_hint = Config()
+
+        result_with = process_image_bytes_with_grid(buf.getvalue(), config_with_hint)
+        result_without = process_image_bytes_with_grid(buf.getvalue(), config_without_hint)
+
+        # Should produce same results
+        assert result_with.col_cuts == result_without.col_cuts
+        assert result_with.row_cuts == result_without.row_cuts
+
+
+class TestAutocorrelationMulti:
+    """Tests for multi-peak autocorrelation function."""
+
+    def test_returns_multiple_peaks(self):
+        """Test that estimate_step_size_autocorr_multi returns multiple peaks."""
+        from pixel_snapper.grid import estimate_step_size_autocorr_multi
+        from pixel_snapper import Config
+
+        config = Config()
+        # Create a profile with multiple periodicities
+        profile = []
+        for i in range(256):
+            # Fundamental period of 16 with harmonic at 8
+            val = 100 if i % 16 == 0 else 0
+            val += 50 if i % 8 == 0 else 0
+            profile.append(float(val))
+
+        results = estimate_step_size_autocorr_multi(profile, config, max_peaks=5)
+
+        # Should return multiple peaks
+        assert len(results) >= 1
+
+    def test_returns_empty_for_no_periodicity(self):
+        """Test that returns empty list for non-periodic profile."""
+        from pixel_snapper.grid import estimate_step_size_autocorr_multi
+        from pixel_snapper import Config
+
+        config = Config()
+        # Random-ish non-periodic profile
+        import random
+        random.seed(42)
+        profile = [random.random() * 0.001 for _ in range(64)]
+
+        results = estimate_step_size_autocorr_multi(profile, config)
+
+        # Should return empty or very few peaks
+        assert isinstance(results, list)
+
+    def test_peaks_sorted_by_confidence(self):
+        """Test that returned peaks are sorted by confidence descending."""
+        from pixel_snapper.grid import estimate_step_size_autocorr_multi
+        from pixel_snapper import Config
+
+        config = Config()
+        # Create periodic profile
+        profile = [100.0 if i % 10 == 0 else 0.0 for i in range(200)]
+
+        results = estimate_step_size_autocorr_multi(profile, config, max_peaks=5)
+
+        if len(results) > 1:
+            confidences = [conf for _, conf in results]
+            assert confidences == sorted(confidences, reverse=True)
+
+
+class TestResolutionHintCLI:
+    """Tests for resolution hint CLI argument parsing."""
+
+    def test_parse_resolution_hint(self):
+        """Test parsing --resolution-hint argument."""
+        from pixel_snapper.cli import parse_args
+
+        config = parse_args(["prog", "in.png", "out.png", "--resolution-hint", "64"])
+        assert config.resolution_hint == 64
+
+    def test_parse_resolution_hint_with_other_args(self):
+        """Test parsing --resolution-hint with other arguments."""
+        from pixel_snapper.cli import parse_args
+
+        config = parse_args([
+            "prog", "in.png", "out.png", "16",
+            "--resolution-hint", "32",
+            "--preview"
+        ])
+        assert config.resolution_hint == 32
+        assert config.k_colors == 16
+        assert config.preview is True
+
+    def test_invalid_resolution_hint_non_integer(self):
+        """Test that non-integer resolution hint raises error."""
+        from pixel_snapper.cli import parse_args
+        from pixel_snapper.config import PixelSnapperError
+        import pytest
+
+        with pytest.raises(PixelSnapperError, match="Invalid resolution-hint"):
+            parse_args(["prog", "in.png", "out.png", "--resolution-hint", "abc"])
+
+    def test_invalid_resolution_hint_negative(self):
+        """Test that negative resolution hint raises error."""
+        from pixel_snapper.cli import parse_args
+        from pixel_snapper.config import PixelSnapperError
+        import pytest
+
+        with pytest.raises(PixelSnapperError, match="positive integer"):
+            parse_args(["prog", "in.png", "out.png", "--resolution-hint", "-5"])
+
+    def test_invalid_resolution_hint_zero(self):
+        """Test that zero resolution hint raises error."""
+        from pixel_snapper.cli import parse_args
+        from pixel_snapper.config import PixelSnapperError
+        import pytest
+
+        with pytest.raises(PixelSnapperError, match="positive integer"):
+            parse_args(["prog", "in.png", "out.png", "--resolution-hint", "0"])

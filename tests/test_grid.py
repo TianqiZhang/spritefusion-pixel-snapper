@@ -11,7 +11,7 @@ from pixel_snapper.grid import (
     snap_uniform_cuts,
     stabilize_both_axes,
     stabilize_cuts,
-    walk,
+    walk_with_offset,
 )
 
 
@@ -88,13 +88,13 @@ class TestResolveStepSizes:
 
 
 class TestWalk:
-    """Tests for walk function."""
+    """Tests for walk_with_offset function."""
 
     def test_basic_walk(self) -> None:
         """Should produce cuts at regular intervals."""
         profile = [10.0] * 100
         config = Config()
-        cuts = walk(profile, 10.0, 100, config)
+        cuts = walk_with_offset(profile, 10.0, 100, 0, config)
 
         assert cuts[0] == 0
         assert cuts[-1] == 100
@@ -107,7 +107,7 @@ class TestWalk:
         profile[20] = 100.0  # Strong peak at 20
 
         config = Config(walker_strength_threshold=0.3)
-        cuts = walk(profile, 10.0, 30, config)
+        cuts = walk_with_offset(profile, 10.0, 30, 0, config)
 
         assert 10 in cuts
         assert 20 in cuts
@@ -116,13 +116,13 @@ class TestWalk:
         """Should raise error for empty profile."""
         config = Config()
         with pytest.raises(PixelSnapperError, match="empty profile"):
-            walk([], 10.0, 100, config)
+            walk_with_offset([], 10.0, 100, 0, config)
 
     def test_includes_boundaries(self) -> None:
         """Should always include 0 and limit."""
         profile = [10.0] * 50
         config = Config()
-        cuts = walk(profile, 10.0, 50, config)
+        cuts = walk_with_offset(profile, 10.0, 50, 0, config)
 
         assert cuts[0] == 0
         assert cuts[-1] == 50
