@@ -12,7 +12,7 @@ from pixel_snapper.grid import (
 from pixel_snapper.scoring import (
     score_grid_uniformity,
     score_edge_alignment,
-    select_best_grid,
+    score_all_candidates,
 )
 
 
@@ -247,8 +247,8 @@ class TestEdgeAlignmentScoring:
         assert score_edge_alignment(profile, [0], 100) == 0.0
 
 
-class TestSelectBestGrid:
-    """Tests for selecting best grid from candidates."""
+class TestScoreAllCandidates:
+    """Tests for scoring and selecting best grid from candidates."""
 
     def test_selects_more_uniform_grid(self):
         """Test that more uniform grid is selected."""
@@ -274,41 +274,41 @@ class TestSelectBestGrid:
         profile_y[4] = 100.0  # Edge at y=4
 
         candidates = [
-            ([0, 4, 8], [0, 4, 8], 4.0),  # Correct grid
-            ([0, 2, 4, 6, 8], [0, 2, 4, 6, 8], 2.0),  # Wrong grid
+            ([0, 4, 8], [0, 4, 8], 4.0, "correct"),  # Correct grid
+            ([0, 2, 4, 6, 8], [0, 2, 4, 6, 8], 2.0, "wrong"),  # Wrong grid
         ]
 
-        col_cuts, row_cuts, best_idx = select_best_grid(
+        scored = score_all_candidates(
             img, profile_x, profile_y, candidates, 8, 8
         )
 
-        # Should select the 2x2 grid (index 0) as it has better uniformity
-        assert best_idx == 0
-        assert col_cuts == [0, 4, 8]
+        # Should select the 2x2 grid as it has better uniformity
+        assert len(scored) == 2
+        assert scored[0].col_cuts == [0, 4, 8]
+        assert scored[0].rank == 1
 
     def test_single_candidate(self):
         """Test returns single candidate directly."""
         img = Image.new("RGBA", (8, 8), (255, 0, 0, 255))
-        candidates = [([0, 4, 8], [0, 4, 8], 4.0)]
+        candidates = [([0, 4, 8], [0, 4, 8], 4.0, "only")]
 
-        col_cuts, row_cuts, best_idx = select_best_grid(
+        scored = score_all_candidates(
             img, [0.0] * 8, [0.0] * 8, candidates, 8, 8
         )
 
-        assert col_cuts == [0, 4, 8]
-        assert best_idx == 0
+        assert len(scored) == 1
+        assert scored[0].col_cuts == [0, 4, 8]
 
     def test_empty_candidates(self):
         """Test handles empty candidate list."""
         img = Image.new("RGBA", (8, 8), (255, 0, 0, 255))
 
-        col_cuts, row_cuts, best_idx = select_best_grid(
+        scored = score_all_candidates(
             img, [0.0] * 8, [0.0] * 8, [], 8, 8
         )
 
-        # Should return fallback
-        assert 0 in col_cuts
-        assert 8 in col_cuts
+        # Should return empty list
+        assert scored == []
 
 
 class TestIntegrationEnhancedDetection:

@@ -26,7 +26,7 @@ from .hough import detect_grid_hough
 from .profile import compute_profiles
 from .quantize import quantize_image
 from .resample import resample
-from .scoring import ScoredCandidate, score_all_candidates, select_best_grid
+from .scoring import ScoredCandidate, score_all_candidates
 
 
 def _detect_grid_cuts(

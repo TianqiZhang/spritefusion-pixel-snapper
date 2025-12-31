@@ -317,6 +317,10 @@ def _get_pixel_width(
 def _homogenize_lines(lines: List[int], pixel_width: float) -> List[int]:
     """Fill in missing grid lines based on expected pixel width.
 
+    Sections smaller than 0.5 * pixel_width are merged with the next section,
+    preserving the original start position (improves on original proper-pixel-art
+    which would lose the start position).
+
     Args:
         lines: Sorted list of line positions.
         pixel_width: Expected spacing between lines.
@@ -328,19 +332,30 @@ def _homogenize_lines(lines: List[int], pixel_width: float) -> List[int]:
         return lines
 
     result: List[int] = []
+    carry_start: Optional[int] = None  # Track start of merged sections
 
     for i in range(len(lines) - 1):
-        start = lines[i]
+        # Use carried start if we're merging, otherwise use current line
+        start = lines[i] if carry_start is None else carry_start
         end = lines[i + 1]
         section_width = end - start
 
         # Calculate how many pixels fit in this section
-        num_pixels = max(1, round(section_width / pixel_width))
-        section_pixel_width = section_width / num_pixels
+        num_pixels = int(round(section_width / pixel_width))
 
-        # Add intermediate lines
+        if num_pixels == 0:
+            # Section too small - carry start forward to merge with next
+            if carry_start is None:
+                carry_start = lines[i]
+            continue
+
+        # Process this (possibly merged) section
+        section_pixel_width = section_width / num_pixels
         for n in range(num_pixels):
-            result.append(start + round(n * section_pixel_width))
+            result.append(start + int(n * section_pixel_width))
+
+        # Reset carry after successful processing
+        carry_start = None
 
     # Add the final boundary
     result.append(lines[-1])

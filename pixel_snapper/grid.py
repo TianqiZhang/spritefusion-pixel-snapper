@@ -364,32 +364,11 @@ def sanitize_cuts(cuts: List[int], limit: int) -> List[int]:
     if limit == 0:
         return [0]
 
-    has_zero = False
-    has_limit = False
-    sanitized = []
-
-    for value in cuts:
-        v = min(value, limit)
-        if v == 0:
-            has_zero = True
-        if v == limit:
-            has_limit = True
-        sanitized.append(v)
-
-    if not has_zero:
-        sanitized.append(0)
-    if not has_limit:
-        sanitized.append(limit)
-
-    sanitized.sort()
-
-    # Remove duplicates while preserving order
-    deduped: List[int] = []
-    for v in sanitized:
-        if not deduped or deduped[-1] != v:
-            deduped.append(v)
-
-    return deduped
+    # Clamp values to [0, limit], add boundaries, dedupe and sort
+    clamped = {max(0, min(v, limit)) for v in cuts}
+    clamped.add(0)
+    clamped.add(limit)
+    return sorted(clamped)
 
 
 def snap_uniform_cuts(

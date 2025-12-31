@@ -51,7 +51,6 @@ from .scoring import (
     score_all_candidates,
     score_grid_uniformity,
     score_edge_alignment,
-    select_best_grid,
 )
 
 __all__ = [
@@ -71,7 +70,6 @@ __all__ = [
     "score_all_candidates",
     "score_grid_uniformity",
     "score_edge_alignment",
-    "select_best_grid",
 ]
 
 __version__ = "1.0.0"
