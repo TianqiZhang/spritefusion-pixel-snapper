@@ -110,26 +110,53 @@ print(f"Row boundaries: {result.row_cuts}")
 
 1. **Color Quantization**: Reduces colors using K-means++ clustering or maps to a fixed palette
 2. **Edge Detection**: Computes gradient profiles to find grid boundaries
-3. **Grid Detection**: Estimates cell size from periodic peaks in the gradient
+3. **Grid Detection**: Multiple methods compete to find the best grid (see below)
 4. **Elastic Walking**: Traces grid boundaries, snapping to detected edges
 5. **Stabilization**: Ensures consistent grid across both axes
 6. **Resampling**: Extracts one color per cell using majority vote
+
+## Grid Detection Methods
+
+Pixel Snapper uses multiple grid detection methods and scores them to find the best fit. Each candidate grid is evaluated on **uniformity** (cells should have consistent colors) and **edge alignment** (grid lines should match detected edges).
+
+### Method Comparison
+
+Tested across 8 sample images (average combined score, higher is better):
+
+| Method | Avg Score | Description |
+|--------|-----------|-------------|
+| **autocorr** | **1.162** | FFT-based autocorrelation to find periodic patterns |
+| hough | 1.074 | Canny edge detection + Hough line transform |
+| fixed(8) | 1.057 | Fixed 8px cell size |
+| fixed(16) | 1.054 | Fixed 16px cell size |
+| peak-based | 1.042 | Median spacing between gradient peaks |
+| fixed(32) | 0.765 | Fixed 32px cell size |
+
+### Key Insights
+
+- **Autocorrelation performs best overall** — highest average score and most consistent (narrow min-max range)
+- **Hough transform is #2** — works well when clear pixel edges exist
+- **Fixed step sizes are competitive** — useful fallbacks when signal-based detection fails
+- **Peak-based has failure modes** — can produce very wrong grids on images without clear periodicity
+- **No single method wins all images** — the multi-method scoring approach is essential
 
 ## Project Structure
 
 ```
 pixel_snapper/
 ├── __init__.py     # Public API
+├── cli.py          # CLI entry point
 ├── config.py       # Configuration
 ├── color.py        # RGB/LAB conversion
 ├── palette.py      # Palette loading
 ├── quantize.py     # K-means quantization
 ├── profile.py      # Edge detection
-├── grid.py         # Grid detection
-├── resample.py     # Majority-vote resampling
-└── cli.py          # CLI entry point
+├── grid.py         # Grid detection (autocorr, peak-based)
+├── hough.py        # Hough transform grid detection
+├── scoring.py      # Grid candidate scoring
+└── resample.py     # Majority-vote resampling
 
-tests/              # Comprehensive test suite (121 tests)
+tests/              # Comprehensive test suite (157 tests)
 colors/             # Bead palette CSV files
 ```
 
