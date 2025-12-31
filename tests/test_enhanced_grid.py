@@ -562,3 +562,203 @@ class TestResolutionHintCLI:
 
         with pytest.raises(PixelSnapperError, match="positive integer"):
             parse_args(["prog", "in.png", "out.png", "--resolution-hint", "0"])
+
+
+class TestComputeExpectedStep:
+    """Tests for compute_expected_step function."""
+
+    def test_both_estimates_available(self):
+        """Test weighted average when both estimates are available."""
+        from pixel_snapper.scoring import compute_expected_step
+
+        # Autocorr with high confidence should dominate
+        result = compute_expected_step(
+            step_autocorr=16.0,
+            step_peaks=8.0,
+            autocorr_confidence=0.9,
+        )
+        # Expected: (16 * 0.9 + 8 * 0.5) / (0.9 + 0.5) = 18.4 / 1.4 = 13.14
+        assert result is not None
+        assert 13.0 < result < 13.5
+
+    def test_only_autocorr_available(self):
+        """Test returns autocorr when only it is available."""
+        from pixel_snapper.scoring import compute_expected_step
+
+        result = compute_expected_step(
+            step_autocorr=16.0,
+            step_peaks=None,
+            autocorr_confidence=0.8,
+        )
+        assert result == 16.0
+
+    def test_only_peaks_available(self):
+        """Test returns peaks when only it is available."""
+        from pixel_snapper.scoring import compute_expected_step
+
+        result = compute_expected_step(
+            step_autocorr=None,
+            step_peaks=8.0,
+            autocorr_confidence=0.0,
+        )
+        assert result == 8.0
+
+    def test_neither_available(self):
+        """Test returns None when neither estimate is available."""
+        from pixel_snapper.scoring import compute_expected_step
+
+        result = compute_expected_step(
+            step_autocorr=None,
+            step_peaks=None,
+            autocorr_confidence=0.0,
+        )
+        assert result is None
+
+    def test_low_confidence_uses_minimum_weight(self):
+        """Test that very low confidence still uses minimum weight."""
+        from pixel_snapper.scoring import compute_expected_step
+
+        # With conf=0.0, autocorr should use minimum weight (0.1)
+        result = compute_expected_step(
+            step_autocorr=16.0,
+            step_peaks=8.0,
+            autocorr_confidence=0.0,
+        )
+        # Expected: (16 * 0.1 + 8 * 0.5) / (0.1 + 0.5) = 5.6 / 0.6 = 9.33
+        assert result is not None
+        assert 9.0 < result < 10.0
+
+
+class TestGridSizePenalty:
+    """Tests for compute_grid_size_penalty function."""
+
+    def test_no_penalty_within_tolerance(self):
+        """Test no penalty when cells match expected."""
+        from pixel_snapper.scoring import compute_grid_size_penalty
+
+        # Expected 16x16, actual 16x16 -> no penalty
+        penalty = compute_grid_size_penalty(
+            cells_x=16, cells_y=16,
+            expected_step=8.0,  # 128 / 8 = 16 cells
+            width=128, height=128,
+        )
+        assert penalty == 0.0
+
+    def test_no_penalty_near_tolerance(self):
+        """Test no penalty when within 25% tolerance."""
+        from pixel_snapper.scoring import compute_grid_size_penalty
+
+        # Expected 16x16, actual 18x18 (12.5% more) -> within tolerance
+        penalty = compute_grid_size_penalty(
+            cells_x=18, cells_y=18,
+            expected_step=8.0,  # 128 / 8 = 16 expected
+            width=128, height=128,
+        )
+        assert penalty == 0.0
+
+    def test_penalty_for_too_few_cells(self):
+        """Test penalty when cells are much fewer than expected."""
+        from pixel_snapper.scoring import compute_grid_size_penalty
+
+        # Expected 16x16, actual 4x4 (0.25x ratio)
+        penalty = compute_grid_size_penalty(
+            cells_x=4, cells_y=4,
+            expected_step=8.0,  # 128 / 8 = 16 expected
+            width=128, height=128,
+        )
+        # log2(0.25) = -2, so penalty = -0.3 * 2 = -0.6
+        assert penalty < 0
+        assert -0.7 < penalty < -0.5
+
+    def test_penalty_for_too_many_cells(self):
+        """Test penalty when cells are much more than expected."""
+        from pixel_snapper.scoring import compute_grid_size_penalty
+
+        # Expected 16x16, actual 64x64 (4x ratio)
+        penalty = compute_grid_size_penalty(
+            cells_x=64, cells_y=64,
+            expected_step=8.0,  # 128 / 8 = 16 expected
+            width=128, height=128,
+        )
+        # log2(4) = 2, so penalty = -0.3 * 2 = -0.6
+        assert penalty < 0
+        assert -0.7 < penalty < -0.5
+
+    def test_symmetric_penalty(self):
+        """Test that penalty is symmetric (2x and 0.5x same magnitude)."""
+        from pixel_snapper.scoring import compute_grid_size_penalty
+
+        # 2x the expected cells
+        penalty_double = compute_grid_size_penalty(
+            cells_x=32, cells_y=32,
+            expected_step=8.0,  # 128 / 8 = 16 expected
+            width=128, height=128,
+        )
+
+        # 0.5x the expected cells
+        penalty_half = compute_grid_size_penalty(
+            cells_x=8, cells_y=8,
+            expected_step=8.0,
+            width=128, height=128,
+        )
+
+        # Both should have the same penalty magnitude
+        assert abs(penalty_double - penalty_half) < 0.01
+
+    def test_no_expected_step_no_penalty(self):
+        """Test no penalty when expected_step is None."""
+        from pixel_snapper.scoring import compute_grid_size_penalty
+
+        penalty = compute_grid_size_penalty(
+            cells_x=4, cells_y=4,
+            expected_step=None,
+            width=128, height=128,
+        )
+        assert penalty == 0.0
+
+
+class TestScoreWithGridSizePenalty:
+    """Tests for score_all_candidates with grid size penalty."""
+
+    def test_penalizes_wrong_size_grid(self):
+        """Test that grids deviating from expected are penalized."""
+        from PIL import Image
+        from pixel_snapper.scoring import score_all_candidates
+
+        # Create a simple image
+        img = Image.new("RGBA", (64, 64), (255, 0, 0, 255))
+
+        # Both grids have uniform color (equal uniformity score)
+        candidates = [
+            ([0, 32, 64], [0, 32, 64], 32.0, "2x2"),  # 2x2 grid
+            ([0, 8, 16, 24, 32, 40, 48, 56, 64], [0, 8, 16, 24, 32, 40, 48, 56, 64], 8.0, "8x8"),  # 8x8 grid
+        ]
+
+        # Expected step = 8.0 (expecting 8x8 grid)
+        scored = score_all_candidates(
+            img, [0.0] * 64, [0.0] * 64, candidates, 64, 64,
+            expected_step=8.0,
+        )
+
+        # 8x8 should rank higher because it matches expected
+        assert scored[0].source == "8x8"
+        assert scored[1].source == "2x2"
+
+    def test_no_penalty_without_expected_step(self):
+        """Test scoring without expected_step doesn't crash."""
+        from PIL import Image
+        from pixel_snapper.scoring import score_all_candidates
+
+        img = Image.new("RGBA", (64, 64), (255, 0, 0, 255))
+        candidates = [
+            ([0, 32, 64], [0, 32, 64], 32.0, "2x2"),
+        ]
+
+        # No expected_step
+        scored = score_all_candidates(
+            img, [0.0] * 64, [0.0] * 64, candidates, 64, 64,
+            expected_step=None,
+        )
+
+        assert len(scored) == 1
+        assert scored[0].combined_score > 0

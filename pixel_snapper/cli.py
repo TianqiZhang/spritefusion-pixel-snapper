@@ -26,7 +26,7 @@ from .hough import detect_grid_hough
 from .profile import compute_profiles
 from .quantize import quantize_image
 from .resample import resample
-from .scoring import ScoredCandidate, score_all_candidates
+from .scoring import ScoredCandidate, compute_expected_step, score_all_candidates
 
 
 def _detect_grid_cuts(
@@ -164,6 +164,22 @@ def process_image_bytes_with_grid(
         step_x_opt, step_y_opt, width, height, config
     )
     logger.debug(f"Resolved step size: {step_x:.2f}x{step_y:.2f}")
+
+    # Compute expected step size from detection methods (for scoring penalty)
+    # Average X and Y expected steps, weighted by autocorr confidence
+    avg_conf = (conf_x + conf_y) / 2.0
+    expected_step_x = compute_expected_step(step_x_autocorr, step_x_peaks, conf_x)
+    expected_step_y = compute_expected_step(step_y_autocorr, step_y_peaks, conf_y)
+    if expected_step_x is not None and expected_step_y is not None:
+        expected_step = (expected_step_x + expected_step_y) / 2.0
+    elif expected_step_x is not None:
+        expected_step = expected_step_x
+    elif expected_step_y is not None:
+        expected_step = expected_step_y
+    else:
+        expected_step = None
+    logger.debug(f"Expected step for scoring: {expected_step}")
+
     t4 = time.perf_counter()
 
     # Build candidate grids if uniformity scoring is enabled
@@ -322,7 +338,8 @@ def process_image_bytes_with_grid(
         scored_candidates: List[ScoredCandidate] = []
         if unique_candidates:
             scored_candidates = score_all_candidates(
-                quantized, profile_x, profile_y, unique_candidates, width, height
+                quantized, profile_x, profile_y, unique_candidates, width, height,
+                expected_step=expected_step,
             )
             if scored_candidates:
                 best = scored_candidates[0]

@@ -48,6 +48,8 @@ from .grid import (
 from .hough import detect_grid_hough
 from .scoring import (
     ScoredCandidate,
+    compute_expected_step,
+    compute_grid_size_penalty,
     score_all_candidates,
     score_grid_uniformity,
     score_edge_alignment,
@@ -67,6 +69,8 @@ __all__ = [
     "detect_grid_hough",
     # Scoring
     "ScoredCandidate",
+    "compute_expected_step",
+    "compute_grid_size_penalty",
     "score_all_candidates",
     "score_grid_uniformity",
     "score_edge_alignment",
