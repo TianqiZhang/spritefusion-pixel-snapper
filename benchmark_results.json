@@ -1,0 +1,752 @@
+{
+  "timestamp": "2025-12-31T16:09:26.284115",
+  "num_images": 8,
+  "total_time_ms": 78894.48,
+  "wins_by_source": {
+    "peak-based": 3,
+    "fixed(16)": 2,
+    "hough": 2,
+    "autocorr": 1
+  },
+  "avg_score_by_source": {
+    "peak-based": 1.1874,
+    "fixed(16)": 0.9162,
+    "autocorr": 1.1792,
+    "hough": 1.0563,
+    "fixed(8)": 0.7719,
+    "fixed(32)": 0.4255,
+    "fixed(64)": -0.1382
+  },
+  "avg_rank_by_source": {
+    "peak-based": 2.0,
+    "fixed(16)": 3.0,
+    "autocorr": 2.38,
+    "hough": 3.38,
+    "fixed(8)": 4.75,
+    "fixed(32)": 5.62,
+    "fixed(64)": 6.88
+  },
+  "source_appearances": {
+    "peak-based": 8,
+    "fixed(16)": 8,
+    "autocorr": 8,
+    "hough": 8,
+    "fixed(8)": 8,
+    "fixed(32)": 8,
+    "fixed(64)": 8
+  },
+  "image_results": [
+    {
+      "filename": "ash.png",
+      "width": 645,
+      "height": 733,
+      "winner_source": "peak-based",
+      "winner_grid_size": "53x60",
+      "winner_score": 1.3374,
+      "num_candidates": 7,
+      "all_candidates": [
+        {
+          "source": "peak-based",
+          "grid_size": "53x60",
+          "cells_x": 53,
+          "cells_y": 60,
+          "step_size": 12.5,
+          "uniformity_score": 149.1007,
+          "edge_score": 0.836,
+          "combined_score": 1.3374,
+          "rank": 1
+        },
+        {
+          "source": "fixed(16)",
+          "grid_size": "50x58",
+          "cells_x": 50,
+          "cells_y": 58,
+          "step_size": 16.0,
+          "uniformity_score": 178.1522,
+          "edge_score": 0.8614,
+          "combined_score": 1.3343,
+          "rank": 2
+        },
+        {
+          "source": "autocorr",
+          "grid_size": "54x60",
+          "cells_x": 54,
+          "cells_y": 60,
+          "step_size": 11.56,
+          "uniformity_score": 151.1867,
+          "edge_score": 0.8241,
+          "combined_score": 1.3303,
+          "rank": 3
+        },
+        {
+          "source": "hough",
+          "grid_size": "51x58",
+          "cells_x": 51,
+          "cells_y": 58,
+          "step_size": 12.65,
+          "uniformity_score": 174.5717,
+          "edge_score": 0.8163,
+          "combined_score": 1.3138,
+          "rank": 4
+        },
+        {
+          "source": "fixed(8)",
+          "grid_size": "92x104",
+          "cells_x": 92,
+          "cells_y": 104,
+          "step_size": 8.0,
+          "uniformity_score": 212.6681,
+          "edge_score": 0.3573,
+          "combined_score": 0.8353,
+          "rank": 5
+        },
+        {
+          "source": "fixed(32)",
+          "grid_size": "22x24",
+          "cells_x": 22,
+          "cells_y": 24,
+          "step_size": 32.0,
+          "uniformity_score": 1298.486,
+          "edge_score": 0.9526,
+          "combined_score": 0.3756,
+          "rank": 6
+        },
+        {
+          "source": "fixed(64)",
+          "grid_size": "12x13",
+          "cells_x": 12,
+          "cells_y": 13,
+          "step_size": 64.0,
+          "uniformity_score": 1849.2601,
+          "edge_score": 0.9896,
+          "combined_score": -0.1675,
+          "rank": 7
+        }
+      ],
+      "processing_time_ms": 7468.45
+    },
+    {
+      "filename": "blob.png",
+      "width": 1024,
+      "height": 1024,
+      "winner_source": "peak-based",
+      "winner_grid_size": "30x31",
+      "winner_score": 1.1886,
+      "num_candidates": 7,
+      "all_candidates": [
+        {
+          "source": "peak-based",
+          "grid_size": "30x31",
+          "cells_x": 30,
+          "cells_y": 31,
+          "step_size": 34.5,
+          "uniformity_score": 104.4398,
+          "edge_score": 1.0,
+          "combined_score": 1.1886,
+          "rank": 1
+        },
+        {
+          "source": "autocorr",
+          "grid_size": "30x31",
+          "cells_x": 30,
+          "cells_y": 31,
+          "step_size": 35.7,
+          "uniformity_score": 104.4082,
+          "edge_score": 0.9908,
+          "combined_score": 1.1841,
+          "rank": 2
+        },
+        {
+          "source": "fixed(32)",
+          "grid_size": "32x32",
+          "cells_x": 32,
+          "cells_y": 32,
+          "step_size": 32.0,
+          "uniformity_score": 120.1885,
+          "edge_score": 0.9201,
+          "combined_score": 1.1017,
+          "rank": 3
+        },
+        {
+          "source": "hough",
+          "grid_size": "30x29",
+          "cells_x": 30,
+          "cells_y": 29,
+          "step_size": 34.13,
+          "uniformity_score": 127.7523,
+          "edge_score": 0.83,
+          "combined_score": 1.0341,
+          "rank": 4
+        },
+        {
+          "source": "fixed(16)",
+          "grid_size": "65x64",
+          "cells_x": 65,
+          "cells_y": 64,
+          "step_size": 16.0,
+          "uniformity_score": 124.9677,
+          "edge_score": 0.4358,
+          "combined_score": 0.5015,
+          "rank": 5
+        },
+        {
+          "source": "fixed(64)",
+          "grid_size": "17x17",
+          "cells_x": 17,
+          "cells_y": 17,
+          "step_size": 64.0,
+          "uniformity_score": 335.4053,
+          "edge_score": 0.9315,
+          "combined_score": 0.2324,
+          "rank": 6
+        },
+        {
+          "source": "fixed(8)",
+          "grid_size": "137x133",
+          "cells_x": 137,
+          "cells_y": 133,
+          "step_size": 8.0,
+          "uniformity_score": 120.6042,
+          "edge_score": 0.251,
+          "combined_score": 0.1024,
+          "rank": 7
+        }
+      ],
+      "processing_time_ms": 4295.77
+    },
+    {
+      "filename": "cat1.webp",
+      "width": 960,
+      "height": 1088,
+      "winner_source": "fixed(16)",
+      "winner_grid_size": "65x70",
+      "winner_score": 1.1158,
+      "num_candidates": 7,
+      "all_candidates": [
+        {
+          "source": "fixed(16)",
+          "grid_size": "65x70",
+          "cells_x": 65,
+          "cells_y": 70,
+          "step_size": 16.0,
+          "uniformity_score": 509.113,
+          "edge_score": 0.6989,
+          "combined_score": 1.1158,
+          "rank": 1
+        },
+        {
+          "source": "peak-based",
+          "grid_size": "69x73",
+          "cells_x": 69,
+          "cells_y": 73,
+          "step_size": 14.5,
+          "uniformity_score": 529.5786,
+          "edge_score": 0.6411,
+          "combined_score": 1.0776,
+          "rank": 2
+        },
+        {
+          "source": "autocorr",
+          "grid_size": "69x73",
+          "cells_x": 69,
+          "cells_y": 73,
+          "step_size": 14.46,
+          "uniformity_score": 583.6727,
+          "edge_score": 0.6121,
+          "combined_score": 1.0382,
+          "rank": 3
+        },
+        {
+          "source": "hough",
+          "grid_size": "65x70",
+          "cells_x": 65,
+          "cells_y": 70,
+          "step_size": 14.77,
+          "uniformity_score": 567.8661,
+          "edge_score": 0.57,
+          "combined_score": 1.0244,
+          "rank": 4
+        },
+        {
+          "source": "fixed(8)",
+          "grid_size": "130x149",
+          "cells_x": 130,
+          "cells_y": 149,
+          "step_size": 8.0,
+          "uniformity_score": 276.018,
+          "edge_score": 0.3881,
+          "combined_score": 0.7739,
+          "rank": 5
+        },
+        {
+          "source": "fixed(32)",
+          "grid_size": "32x35",
+          "cells_x": 32,
+          "cells_y": 35,
+          "step_size": 32.0,
+          "uniformity_score": 1612.9331,
+          "edge_score": 0.7443,
+          "combined_score": 0.3087,
+          "rank": 6
+        },
+        {
+          "source": "fixed(64)",
+          "grid_size": "17x19",
+          "cells_x": 17,
+          "cells_y": 19,
+          "step_size": 64.0,
+          "uniformity_score": 2179.2092,
+          "edge_score": 1.0,
+          "combined_score": -0.0924,
+          "rank": 7
+        }
+      ],
+      "processing_time_ms": 16622.64
+    },
+    {
+      "filename": "cat2.jpg",
+      "width": 944,
+      "height": 1104,
+      "winner_source": "hough",
+      "winner_grid_size": "60x74",
+      "winner_score": 1.1164,
+      "num_candidates": 7,
+      "all_candidates": [
+        {
+          "source": "hough",
+          "grid_size": "60x74",
+          "cells_x": 60,
+          "cells_y": 74,
+          "step_size": 15.73,
+          "uniformity_score": 447.7863,
+          "edge_score": 0.6107,
+          "combined_score": 1.1164,
+          "rank": 1
+        },
+        {
+          "source": "autocorr",
+          "grid_size": "64x78",
+          "cells_x": 64,
+          "cells_y": 78,
+          "step_size": 15.14,
+          "uniformity_score": 477.1568,
+          "edge_score": 0.6237,
+          "combined_score": 1.1105,
+          "rank": 2
+        },
+        {
+          "source": "peak-based",
+          "grid_size": "64x78",
+          "cells_x": 64,
+          "cells_y": 78,
+          "step_size": 15.0,
+          "uniformity_score": 477.1563,
+          "edge_score": 0.6237,
+          "combined_score": 1.1105,
+          "rank": 3
+        },
+        {
+          "source": "fixed(16)",
+          "grid_size": "63x72",
+          "cells_x": 63,
+          "cells_y": 72,
+          "step_size": 16.0,
+          "uniformity_score": 614.1073,
+          "edge_score": 0.5381,
+          "combined_score": 1.0099,
+          "rank": 4
+        },
+        {
+          "source": "fixed(8)",
+          "grid_size": "126x148",
+          "cells_x": 126,
+          "cells_y": 148,
+          "step_size": 8.0,
+          "uniformity_score": 180.4715,
+          "edge_score": 0.4314,
+          "combined_score": 0.8359,
+          "rank": 5
+        },
+        {
+          "source": "fixed(32)",
+          "grid_size": "33x38",
+          "cells_x": 33,
+          "cells_y": 38,
+          "step_size": 32.0,
+          "uniformity_score": 1365.116,
+          "edge_score": 0.7159,
+          "combined_score": 0.5013,
+          "rank": 6
+        },
+        {
+          "source": "fixed(64)",
+          "grid_size": "15x19",
+          "cells_x": 15,
+          "cells_y": 19,
+          "step_size": 64.0,
+          "uniformity_score": 2369.5389,
+          "edge_score": 1.0,
+          "combined_score": -0.1008,
+          "rank": 7
+        }
+      ],
+      "processing_time_ms": 16170.68
+    },
+    {
+      "filename": "demon.png",
+      "width": 1024,
+      "height": 1024,
+      "winner_source": "hough",
+      "winner_grid_size": "62x61",
+      "winner_score": 1.1877,
+      "num_candidates": 7,
+      "all_candidates": [
+        {
+          "source": "hough",
+          "grid_size": "62x61",
+          "cells_x": 62,
+          "cells_y": 61,
+          "step_size": 16.52,
+          "uniformity_score": 101.1339,
+          "edge_score": 0.6925,
+          "combined_score": 1.1877,
+          "rank": 1
+        },
+        {
+          "source": "fixed(16)",
+          "grid_size": "64x61",
+          "cells_x": 64,
+          "cells_y": 61,
+          "step_size": 16.0,
+          "uniformity_score": 160.0537,
+          "edge_score": 0.8462,
+          "combined_score": 1.1721,
+          "rank": 2
+        },
+        {
+          "source": "peak-based",
+          "grid_size": "63x61",
+          "cells_x": 63,
+          "cells_y": 61,
+          "step_size": 17.0,
+          "uniformity_score": 162.7096,
+          "edge_score": 0.8493,
+          "combined_score": 1.1695,
+          "rank": 3
+        },
+        {
+          "source": "autocorr",
+          "grid_size": "63x61",
+          "cells_x": 63,
+          "cells_y": 61,
+          "step_size": 17.24,
+          "uniformity_score": 163.9784,
+          "edge_score": 0.8487,
+          "combined_score": 1.1672,
+          "rank": 4
+        },
+        {
+          "source": "fixed(8)",
+          "grid_size": "131x129",
+          "cells_x": 131,
+          "cells_y": 129,
+          "step_size": 8.0,
+          "uniformity_score": 147.1195,
+          "edge_score": 0.3782,
+          "combined_score": 0.6219,
+          "rank": 5
+        },
+        {
+          "source": "fixed(32)",
+          "grid_size": "33x31",
+          "cells_x": 33,
+          "cells_y": 31,
+          "step_size": 32.0,
+          "uniformity_score": 422.6347,
+          "edge_score": 0.8291,
+          "combined_score": 0.4815,
+          "rank": 6
+        },
+        {
+          "source": "fixed(64)",
+          "grid_size": "16x16",
+          "cells_x": 16,
+          "cells_y": 16,
+          "step_size": 64.0,
+          "uniformity_score": 637.6383,
+          "edge_score": 1.0,
+          "combined_score": -0.0703,
+          "rank": 7
+        }
+      ],
+      "processing_time_ms": 8964.61
+    },
+    {
+      "filename": "pumpkin.png",
+      "width": 1006,
+      "height": 1076,
+      "winner_source": "fixed(16)",
+      "winner_grid_size": "59x64",
+      "winner_score": 1.3349,
+      "num_candidates": 7,
+      "all_candidates": [
+        {
+          "source": "fixed(16)",
+          "grid_size": "59x64",
+          "cells_x": 59,
+          "cells_y": 64,
+          "step_size": 16.0,
+          "uniformity_score": 65.59,
+          "edge_score": 0.896,
+          "combined_score": 1.3349,
+          "rank": 1
+        },
+        {
+          "source": "autocorr",
+          "grid_size": "59x64",
+          "cells_x": 59,
+          "cells_y": 64,
+          "step_size": 16.73,
+          "uniformity_score": 65.6265,
+          "edge_score": 0.896,
+          "combined_score": 1.3349,
+          "rank": 2
+        },
+        {
+          "source": "peak-based",
+          "grid_size": "59x64",
+          "cells_x": 59,
+          "cells_y": 64,
+          "step_size": 17.0,
+          "uniformity_score": 65.667,
+          "edge_score": 0.896,
+          "combined_score": 1.3348,
+          "rank": 3
+        },
+        {
+          "source": "hough",
+          "grid_size": "57x62",
+          "cells_x": 57,
+          "cells_y": 62,
+          "step_size": 17.65,
+          "uniformity_score": 60.9834,
+          "edge_score": 0.8427,
+          "combined_score": 1.3162,
+          "rank": 4
+        },
+        {
+          "source": "fixed(8)",
+          "grid_size": "127x136",
+          "cells_x": 127,
+          "cells_y": 136,
+          "step_size": 8.0,
+          "uniformity_score": 60.9807,
+          "edge_score": 0.3561,
+          "combined_score": 0.7464,
+          "rank": 5
+        },
+        {
+          "source": "fixed(32)",
+          "grid_size": "30x33",
+          "cells_x": 30,
+          "cells_y": 33,
+          "step_size": 32.0,
+          "uniformity_score": 330.2853,
+          "edge_score": 0.946,
+          "combined_score": 0.6115,
+          "rank": 6
+        },
+        {
+          "source": "fixed(64)",
+          "grid_size": "17x18",
+          "cells_x": 17,
+          "cells_y": 18,
+          "step_size": 64.0,
+          "uniformity_score": 580.1083,
+          "edge_score": 1.0,
+          "combined_score": -0.0463,
+          "rank": 7
+        }
+      ],
+      "processing_time_ms": 17029.49
+    },
+    {
+      "filename": "zelda1.png",
+      "width": 450,
+      "height": 450,
+      "winner_source": "autocorr",
+      "winner_grid_size": "78x80",
+      "winner_score": 1.1103,
+      "num_candidates": 7,
+      "all_candidates": [
+        {
+          "source": "autocorr",
+          "grid_size": "78x80",
+          "cells_x": 78,
+          "cells_y": 80,
+          "step_size": 6.32,
+          "uniformity_score": 448.7511,
+          "edge_score": 0.583,
+          "combined_score": 1.1103,
+          "rank": 1
+        },
+        {
+          "source": "peak-based",
+          "grid_size": "79x80",
+          "cells_x": 79,
+          "cells_y": 80,
+          "step_size": 6.0,
+          "uniformity_score": 450.8156,
+          "edge_score": 0.5827,
+          "combined_score": 1.1094,
+          "rank": 2
+        },
+        {
+          "source": "fixed(8)",
+          "grid_size": "68x67",
+          "cells_x": 68,
+          "cells_y": 67,
+          "step_size": 8.0,
+          "uniformity_score": 532.3552,
+          "edge_score": 0.6362,
+          "combined_score": 1.1032,
+          "rank": 3
+        },
+        {
+          "source": "fixed(16)",
+          "grid_size": "30x30",
+          "cells_x": 30,
+          "cells_y": 30,
+          "step_size": 16.0,
+          "uniformity_score": 1379.4594,
+          "edge_score": 0.702,
+          "combined_score": 0.4103,
+          "rank": 4
+        },
+        {
+          "source": "hough",
+          "grid_size": "33x34",
+          "cells_x": 33,
+          "cells_y": 34,
+          "step_size": 13.64,
+          "uniformity_score": 1298.2946,
+          "edge_score": 0.4675,
+          "combined_score": 0.3736,
+          "rank": 5
+        },
+        {
+          "source": "fixed(32)",
+          "grid_size": "16x16",
+          "cells_x": 16,
+          "cells_y": 16,
+          "step_size": 32.0,
+          "uniformity_score": 1803.0442,
+          "edge_score": 0.8554,
+          "combined_score": 0.0439,
+          "rank": 6
+        },
+        {
+          "source": "fixed(64)",
+          "grid_size": "8x8",
+          "cells_x": 8,
+          "cells_y": 8,
+          "step_size": 64.0,
+          "uniformity_score": 2476.9387,
+          "edge_score": 1.0,
+          "combined_score": -0.4559,
+          "rank": 7
+        }
+      ],
+      "processing_time_ms": 3757.16
+    },
+    {
+      "filename": "zelda2.png",
+      "width": 450,
+      "height": 450,
+      "winner_source": "peak-based",
+      "winner_grid_size": "78x82",
+      "winner_score": 1.1715,
+      "num_candidates": 7,
+      "all_candidates": [
+        {
+          "source": "peak-based",
+          "grid_size": "78x82",
+          "cells_x": 78,
+          "cells_y": 82,
+          "step_size": 6.0,
+          "uniformity_score": 504.6284,
+          "edge_score": 0.6167,
+          "combined_score": 1.1715,
+          "rank": 1
+        },
+        {
+          "source": "autocorr",
+          "grid_size": "78x81",
+          "cells_x": 78,
+          "cells_y": 81,
+          "step_size": 6.33,
+          "uniformity_score": 542.4425,
+          "edge_score": 0.6097,
+          "combined_score": 1.1577,
+          "rank": 2
+        },
+        {
+          "source": "fixed(8)",
+          "grid_size": "72x73",
+          "cells_x": 72,
+          "cells_y": 73,
+          "step_size": 8.0,
+          "uniformity_score": 607.8268,
+          "edge_score": 0.6425,
+          "combined_score": 1.1564,
+          "rank": 3
+        },
+        {
+          "source": "hough",
+          "grid_size": "72x70",
+          "cells_x": 72,
+          "cells_y": 70,
+          "step_size": 6.25,
+          "uniformity_score": 671.9378,
+          "edge_score": 0.5327,
+          "combined_score": 1.0841,
+          "rank": 4
+        },
+        {
+          "source": "fixed(16)",
+          "grid_size": "31x32",
+          "cells_x": 31,
+          "cells_y": 32,
+          "step_size": 16.0,
+          "uniformity_score": 1999.7597,
+          "edge_score": 0.7103,
+          "combined_score": 0.4505,
+          "rank": 5
+        },
+        {
+          "source": "fixed(32)",
+          "grid_size": "15x16",
+          "cells_x": 15,
+          "cells_y": 16,
+          "step_size": 32.0,
+          "uniformity_score": 2935.4989,
+          "edge_score": 0.8902,
+          "combined_score": -0.0204,
+          "rank": 6
+        },
+        {
+          "source": "fixed(64)",
+          "grid_size": "8x10",
+          "cells_x": 8,
+          "cells_y": 10,
+          "step_size": 64.0,
+          "uniformity_score": 3686.4542,
+          "edge_score": 1.0,
+          "combined_score": -0.4045,
+          "rank": 7
+        }
+      ],
+      "processing_time_ms": 4334.23
+    }
+  ]
+}
