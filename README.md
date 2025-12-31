@@ -125,19 +125,19 @@ Tested across 8 sample images (average combined score, higher is better):
 
 | Method | Avg Score | Description |
 |--------|-----------|-------------|
-| **autocorr** | **1.162** | FFT-based autocorrelation to find periodic patterns |
-| hough | 1.074 | Canny edge detection + Hough line transform |
-| fixed(8) | 1.057 | Fixed 8px cell size |
-| fixed(16) | 1.054 | Fixed 16px cell size |
-| peak-based | 1.042 | Median spacing between gradient peaks |
-| fixed(32) | 0.765 | Fixed 32px cell size |
+| **peak-based** | **1.187** | Median spacing between gradient peaks |
+| **autocorr** | **1.179** | FFT-based autocorrelation to find periodic patterns |
+| hough | 1.098 | Canny edge detection + Hough line transform |
+| fixed(16) | 1.052 | Fixed 16px cell size |
+| fixed(8) | 1.041 | Fixed 8px cell size |
+| fixed(32) | 0.787 | Fixed 32px cell size |
 
 ### Key Insights
 
-- **Autocorrelation performs best overall** — highest average score and most consistent (narrow min-max range)
-- **Hough transform is #2** — works well when clear pixel edges exist
-- **Fixed step sizes are competitive** — useful fallbacks when signal-based detection fails
-- **Peak-based has failure modes** — can produce very wrong grids on images without clear periodicity
+- **Peak-based and autocorrelation perform best** — signal-processing methods excel with edge artifact suppression
+- **Hough transform is solid #3** — uses Canny edge detection, works well when clear pixel edges exist
+- **Fixed step sizes are useful fallbacks** — competitive when signal-based detection fails
+- **Edge artifact suppression is critical** — all methods benefit from ignoring noisy border pixels
 - **No single method wins all images** — the multi-method scoring approach is essential
 
 ## Project Structure

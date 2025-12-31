@@ -122,6 +122,19 @@ def process_image_bytes_with_grid(
     t2 = time.perf_counter()
 
     profile_x, profile_y = compute_profiles(quantized)
+
+    # Suppress edge artifacts by zeroing out border gradient values
+    # (AI-generated images often have artifacts at edges)
+    profile_border = 2
+    if len(profile_x) > 2 * profile_border:
+        for i in range(profile_border):
+            profile_x[i] = 0.0
+            profile_x[-(i + 1)] = 0.0
+    if len(profile_y) > 2 * profile_border:
+        for i in range(profile_border):
+            profile_y[i] = 0.0
+            profile_y[-(i + 1)] = 0.0
+
     t3 = time.perf_counter()
 
     # Enhanced step size estimation with autocorrelation
