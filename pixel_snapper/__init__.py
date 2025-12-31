@@ -47,6 +47,8 @@ from .grid import (
 )
 from .hough import detect_grid_hough
 from .scoring import (
+    ScoredCandidate,
+    score_all_candidates,
     score_grid_uniformity,
     score_edge_alignment,
     select_best_grid,
@@ -64,6 +66,9 @@ __all__ = [
     "estimate_step_size_autocorr",
     "find_best_offset",
     "detect_grid_hough",
+    # Scoring
+    "ScoredCandidate",
+    "score_all_candidates",
     "score_grid_uniformity",
     "score_edge_alignment",
     "select_best_grid",

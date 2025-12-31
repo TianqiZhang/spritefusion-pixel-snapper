@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -10,6 +11,35 @@ from PIL import Image
 from .config import Config
 
 logger = logging.getLogger("pixel_snapper")
+
+
+@dataclass
+class ScoredCandidate:
+    """A grid candidate with its scores and metadata."""
+
+    col_cuts: List[int]
+    row_cuts: List[int]
+    step_size: float
+    source: str
+    uniformity_score: float  # Raw variance (lower is better)
+    edge_score: float  # Normalized edge alignment (higher is better)
+    combined_score: float  # Final score (higher is better)
+    rank: int  # 1 = best
+
+    @property
+    def cells_x(self) -> int:
+        """Number of cells in X direction."""
+        return len(self.col_cuts) - 1
+
+    @property
+    def cells_y(self) -> int:
+        """Number of cells in Y direction."""
+        return len(self.row_cuts) - 1
+
+    @property
+    def grid_size(self) -> str:
+        """Grid size as string (e.g., '32x32')."""
+        return f"{self.cells_x}x{self.cells_y}"
 
 
 def score_grid_uniformity(
@@ -117,6 +147,107 @@ def score_edge_alignment(
     return total_strength / count
 
 
+def score_all_candidates(
+    img: Image.Image,
+    profile_x: Sequence[float],
+    profile_y: Sequence[float],
+    candidates: List[Tuple[List[int], List[int], float, str]],
+    width: int,
+    height: int,
+    uniformity_weight: float = 1.0,
+    edge_weight: float = 0.5,
+) -> List[ScoredCandidate]:
+    """Score all candidates and return them sorted by score.
+
+    Args:
+        img: Input RGBA image.
+        profile_x: Column gradient profile.
+        profile_y: Row gradient profile.
+        candidates: List of (col_cuts, row_cuts, step_size, source) tuples.
+        width: Image width.
+        height: Image height.
+        uniformity_weight: Weight for uniformity score.
+        edge_weight: Weight for edge alignment score.
+
+    Returns:
+        List of ScoredCandidate objects, sorted by combined score (best first).
+    """
+    if not candidates:
+        return []
+
+    # Compute raw scores for all candidates
+    raw_scores: List[Tuple[float, float, float]] = []
+    for col_cuts, row_cuts, _, _ in candidates:
+        uniformity = score_grid_uniformity(img, col_cuts, row_cuts)
+        edge_x = score_edge_alignment(profile_x, col_cuts, width)
+        edge_y = score_edge_alignment(profile_y, row_cuts, height)
+        raw_scores.append((uniformity, edge_x, edge_y))
+
+    # Normalize scores for fair comparison
+    uniformities = [s[0] for s in raw_scores if s[0] < float("inf")]
+    edge_xs = [s[1] for s in raw_scores]
+    edge_ys = [s[2] for s in raw_scores]
+
+    max_uniformity = max(uniformities) if uniformities else 1.0
+    max_edge_x = max(edge_xs) if edge_xs else 1.0
+    max_edge_y = max(edge_ys) if edge_ys else 1.0
+
+    # Avoid division by zero
+    max_uniformity = max(max_uniformity, 1e-10)
+    max_edge_x = max(max_edge_x, 1e-10)
+    max_edge_y = max(max_edge_y, 1e-10)
+
+    # Build scored candidates
+    scored: List[ScoredCandidate] = []
+    for i, (col_cuts, row_cuts, step_size, source) in enumerate(candidates):
+        uniformity, edge_x, edge_y = raw_scores[i]
+
+        # Normalize uniformity (invert so lower becomes higher score)
+        if uniformity < float("inf"):
+            norm_uniformity = 1.0 - (uniformity / max_uniformity)
+        else:
+            norm_uniformity = 0.0
+
+        # Normalize edge scores
+        norm_edge_x = edge_x / max_edge_x
+        norm_edge_y = edge_y / max_edge_y
+        norm_edge = (norm_edge_x + norm_edge_y) / 2.0
+
+        # Combined score (higher is better)
+        combined = uniformity_weight * norm_uniformity + edge_weight * norm_edge
+
+        scored.append(
+            ScoredCandidate(
+                col_cuts=col_cuts,
+                row_cuts=row_cuts,
+                step_size=step_size,
+                source=source,
+                uniformity_score=uniformity,
+                edge_score=norm_edge,
+                combined_score=combined,
+                rank=0,  # Will be set after sorting
+            )
+        )
+
+    # Sort by combined score (descending - best first)
+    scored.sort(key=lambda c: c.combined_score, reverse=True)
+
+    # Assign ranks
+    for i, candidate in enumerate(scored):
+        candidate.rank = i + 1
+
+    # Log all scored candidates
+    logger.debug("Scoring candidates:")
+    for c in scored:
+        logger.debug(
+            f"  [{c.rank}] {c.source} -> {c.grid_size}: "
+            f"uniformity={c.uniformity_score:.2f}, "
+            f"edge={c.edge_score:.3f}, combined={c.combined_score:.3f}"
+        )
+
+    return scored
+
+
 def select_best_grid(
     img: Image.Image,
     profile_x: Sequence[float],
@@ -151,61 +282,23 @@ def select_best_grid(
     if len(candidates) == 1:
         return candidates[0][0], candidates[0][1], 0
 
-    best_score = float("-inf")
-    best_idx = 0
+    # Convert to format with empty source (for backwards compatibility)
+    candidates_with_source = [
+        (col_cuts, row_cuts, step, "") for col_cuts, row_cuts, step in candidates
+    ]
 
-    # Compute scores for all candidates
-    all_scores: List[Tuple[float, float, float]] = []
-    for col_cuts, row_cuts, _ in candidates:
-        uniformity = score_grid_uniformity(img, col_cuts, row_cuts)
-        edge_x = score_edge_alignment(profile_x, col_cuts, width)
-        edge_y = score_edge_alignment(profile_y, row_cuts, height)
-        all_scores.append((uniformity, edge_x, edge_y))
+    scored = score_all_candidates(
+        img, profile_x, profile_y, candidates_with_source,
+        width, height, uniformity_weight, edge_weight
+    )
 
-    # Normalize scores for fair comparison
-    uniformities = [s[0] for s in all_scores if s[0] < float("inf")]
-    edge_xs = [s[1] for s in all_scores]
-    edge_ys = [s[2] for s in all_scores]
+    if not scored:
+        return [0, width], [0, height], 0
 
-    max_uniformity = max(uniformities) if uniformities else 1.0
-    max_edge_x = max(edge_xs) if edge_xs else 1.0
-    max_edge_y = max(edge_ys) if edge_ys else 1.0
+    # Find the index of the best candidate in the original list
+    best = scored[0]
+    for i, (col_cuts, row_cuts, _) in enumerate(candidates):
+        if col_cuts == best.col_cuts and row_cuts == best.row_cuts:
+            return best.col_cuts, best.row_cuts, i
 
-    # Avoid division by zero
-    max_uniformity = max(max_uniformity, 1e-10)
-    max_edge_x = max(max_edge_x, 1e-10)
-    max_edge_y = max(max_edge_y, 1e-10)
-
-    logger.debug("Scoring candidates:")
-    for i, (col_cuts, row_cuts, step_size) in enumerate(candidates):
-        uniformity, edge_x, edge_y = all_scores[i]
-
-        # Normalize uniformity (invert so lower becomes higher score)
-        if uniformity < float("inf"):
-            norm_uniformity = 1.0 - (uniformity / max_uniformity)
-        else:
-            norm_uniformity = 0.0
-
-        # Normalize edge scores
-        norm_edge_x = edge_x / max_edge_x
-        norm_edge_y = edge_y / max_edge_y
-        norm_edge = (norm_edge_x + norm_edge_y) / 2.0
-
-        # Combined score (higher is better)
-        combined = (
-            uniformity_weight * norm_uniformity + edge_weight * norm_edge
-        )
-
-        cells_x = len(col_cuts) - 1
-        cells_y = len(row_cuts) - 1
-        logger.debug(
-            f"  [{i}] {cells_x}x{cells_y}: "
-            f"uniformity={uniformity:.2f} (norm={norm_uniformity:.3f}), "
-            f"edge={norm_edge:.3f}, combined={combined:.3f}"
-        )
-
-        if combined > best_score:
-            best_score = combined
-            best_idx = i
-
-    return candidates[best_idx][0], candidates[best_idx][1], best_idx
+    return best.col_cuts, best.row_cuts, 0

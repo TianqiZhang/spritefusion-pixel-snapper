@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger("pixel_snapper")
 
@@ -26,7 +26,7 @@ from .hough import detect_grid_hough
 from .profile import compute_profiles
 from .quantize import quantize_image
 from .resample import resample
-from .scoring import select_best_grid
+from .scoring import ScoredCandidate, score_all_candidates, select_best_grid
 
 
 def _detect_grid_cuts(
@@ -71,6 +71,12 @@ class ProcessingResult:
     output_bytes: bytes
     col_cuts: List[int]
     row_cuts: List[int]
+    scored_candidates: List[ScoredCandidate] = None  # Top candidates with scores
+    quantized_img: Optional[Image.Image] = None  # For preview rendering
+
+    def __post_init__(self):
+        if self.scored_candidates is None:
+            self.scored_candidates = []
 
 
 def process_image_bytes(
@@ -299,20 +305,21 @@ def process_image_bytes_with_grid(
             cells_y = len(row_cuts) - 1
             logger.debug(f"  Candidate: {source} -> {cells_x}x{cells_y} cells (step={step:.2f})")
 
-        # Select best grid using uniformity and edge alignment scoring
+        # Score all candidates and select best
+        scored_candidates: List[ScoredCandidate] = []
         if unique_candidates:
-            # Strip source for select_best_grid (it doesn't need it)
-            candidates_for_scoring = [
-                (col_cuts, row_cuts, step)
-                for col_cuts, row_cuts, step, source in unique_candidates
-            ]
-            raw_col_cuts, raw_row_cuts, best_idx = select_best_grid(
-                quantized, profile_x, profile_y, candidates_for_scoring, width, height
+            scored_candidates = score_all_candidates(
+                quantized, profile_x, profile_y, unique_candidates, width, height
             )
-            winner_source = unique_candidates[best_idx][3]
-            cells_x = len(raw_col_cuts) - 1
-            cells_y = len(raw_row_cuts) - 1
-            logger.debug(f"Winner: {winner_source} -> {cells_x}x{cells_y} cells")
+            if scored_candidates:
+                best = scored_candidates[0]
+                raw_col_cuts, raw_row_cuts = best.col_cuts, best.row_cuts
+                logger.debug(f"Winner: {best.source} -> {best.grid_size} cells")
+            else:
+                raw_col_cuts, raw_row_cuts = _detect_grid_cuts(
+                    profile_x, profile_y, step_x, step_y, width, height, config
+                )
+                logger.debug("No scored candidates, using fallback detection")
         else:
             raw_col_cuts, raw_row_cuts = _detect_grid_cuts(
                 profile_x, profile_y, step_x, step_y, width, height, config
@@ -320,6 +327,7 @@ def process_image_bytes_with_grid(
             logger.debug("No candidates after filtering, using fallback detection")
     else:
         # Single detection path
+        scored_candidates = []
         raw_col_cuts, raw_row_cuts = _detect_grid_cuts(
             profile_x, profile_y, step_x, step_y, width, height, config
         )
@@ -362,6 +370,8 @@ def process_image_bytes_with_grid(
         output_bytes=out_buf.getvalue(),
         col_cuts=col_cuts,
         row_cuts=row_cuts,
+        scored_candidates=scored_candidates,
+        quantized_img=quantized,
     )
 
 
@@ -381,9 +391,21 @@ def process_image(config: Config) -> None:
 
     print(f"Saved to: {config.output_path}")
     if config.preview:
-        preview_side_by_side(
-            img_bytes, result.output_bytes, result.col_cuts, result.row_cuts
-        )
+        # Use candidate preview if we have scored candidates and quantized image
+        if result.scored_candidates and result.quantized_img:
+            preview_candidates(
+                img_bytes,
+                result.output_bytes,
+                result.scored_candidates,
+                result.col_cuts,
+                result.row_cuts,
+                result.quantized_img,
+            )
+        else:
+            # Fall back to simple side-by-side preview
+            preview_side_by_side(
+                img_bytes, result.output_bytes, result.col_cuts, result.row_cuts
+            )
 
 
 def preview_side_by_side(
@@ -525,6 +547,151 @@ def draw_output_grid(
             draw.line([(0, height - 1), (width - 1, height - 1)], fill=color, width=1)
 
     return result
+
+
+def preview_candidates(
+    input_bytes: bytes,
+    output_bytes: bytes,
+    candidates: List[ScoredCandidate],
+    winner_col_cuts: List[int],
+    winner_row_cuts: List[int],
+    quantized_img: Image.Image,
+    scale: int = 4,
+    max_candidates: int = 5,
+) -> None:
+    """Display top candidates in two rows: inputs with grids, then outputs.
+
+    Row 1: Input images with grid overlays for each candidate
+    Row 2: Resampled outputs for each candidate
+
+    Args:
+        input_bytes: Original image bytes.
+        output_bytes: Processed (winner) image bytes.
+        candidates: List of scored candidates, sorted by score (best first).
+        winner_col_cuts: Column cuts used for the winner (post-stabilization).
+        winner_row_cuts: Row cuts used for the winner (post-stabilization).
+        quantized_img: Quantized image used for resampling candidates.
+        scale: Scale factor for enlarging images.
+        max_candidates: Maximum number of candidates to display.
+    """
+    input_img = Image.open(io.BytesIO(input_bytes)).convert("RGBA")
+    output_img = Image.open(io.BytesIO(output_bytes)).convert("RGBA")
+    in_w, in_h = input_img.size
+    out_w, out_h = output_img.size
+
+    # Calculate scale factor to make images reasonably sized
+    min_dimension = min(in_w, in_h)
+    if min_dimension * scale < 250:
+        scale = max(scale, 250 // min_dimension + 1)
+
+    # Limit scale for very small images to avoid huge previews
+    max_size = 350
+    if in_w * scale > max_size or in_h * scale > max_size:
+        scale = min(max_size // in_w, max_size // in_h, scale)
+        scale = max(scale, 1)
+
+    scaled_w, scaled_h = in_w * scale, in_h * scale
+
+    # Prepare candidate list
+    display_candidates = list(candidates[:max_candidates])
+
+    # Colors for different candidates
+    colors = [
+        (0, 255, 0, 200),    # Green - winner
+        (255, 165, 0, 180),  # Orange - #2
+        (255, 0, 255, 180),  # Magenta - #3
+        (0, 255, 255, 180),  # Cyan - #4
+        (255, 255, 0, 180),  # Yellow - #5
+    ]
+
+    # Layout constants
+    label_height = 40
+    row_gap = 8  # Gap between rows
+    col_gap = 6  # Gap between columns
+
+    # Number of columns: candidates + final output
+    num_cols = len(display_candidates) + 1
+
+    # Calculate total dimensions
+    total_width = num_cols * scaled_w + (num_cols - 1) * col_gap
+    total_height = 2 * scaled_h + row_gap + label_height
+
+    # Create preview canvas
+    preview = Image.new("RGBA", (total_width, total_height), (30, 30, 30, 255))
+    draw = ImageDraw.Draw(preview)
+
+    # Try to get a font for labels
+    try:
+        font = ImageFont.truetype("arial.ttf", 11)
+        font_small = ImageFont.truetype("arial.ttf", 9)
+    except (OSError, IOError):
+        try:
+            font = ImageFont.truetype("DejaVuSans.ttf", 11)
+            font_small = ImageFont.truetype("DejaVuSans.ttf", 9)
+        except (OSError, IOError):
+            font = ImageFont.load_default()
+            font_small = font
+
+    # Row 1: Input images with grid overlays
+    # Row 2: Resampled outputs
+    for idx, candidate in enumerate(display_candidates):
+        col_x = idx * (scaled_w + col_gap)
+        color = colors[idx % len(colors)]
+        is_winner = idx == 0
+
+        # Row 1: Input with grid overlay
+        scaled_input = input_img.resize((scaled_w, scaled_h), resample=Image.NEAREST)
+        img_with_grid = draw_grid_overlay(
+            scaled_input, candidate.col_cuts, candidate.row_cuts, scale, color
+        )
+        preview.paste(img_with_grid, (col_x, 0))
+
+        # Row 2: Resampled output
+        candidate_output = resample(quantized_img, candidate.col_cuts, candidate.row_cuts)
+        scaled_candidate_output = candidate_output.resize(
+            (scaled_w, scaled_h), resample=Image.NEAREST
+        )
+        preview.paste(scaled_candidate_output, (col_x, scaled_h + row_gap))
+
+        # Label below row 2
+        label_y = 2 * scaled_h + row_gap + 4
+
+        if is_winner:
+            line1 = f"#1 WINNER: {candidate.source}"
+            text_color = (0, 255, 0)
+        else:
+            line1 = f"#{candidate.rank}: {candidate.source}"
+            text_color = (200, 200, 200)
+
+        line2 = f"{candidate.grid_size} | {candidate.combined_score:.3f}"
+
+        draw.text((col_x + 2, label_y), line1, fill=text_color, font=font)
+        draw.text((col_x + 2, label_y + 13), line2, fill=(150, 150, 150), font=font_small)
+
+    # Final column: Stabilized winner
+    col_x = len(display_candidates) * (scaled_w + col_gap)
+
+    # Row 1: Input with stabilized grid
+    scaled_input = input_img.resize((scaled_w, scaled_h), resample=Image.NEAREST)
+    img_with_grid = draw_grid_overlay(
+        scaled_input, winner_col_cuts, winner_row_cuts, scale, (255, 255, 255, 200)
+    )
+    preview.paste(img_with_grid, (col_x, 0))
+
+    # Row 2: Final output
+    scaled_output = output_img.resize((scaled_w, scaled_h), resample=Image.NEAREST)
+    preview.paste(scaled_output, (col_x, scaled_h + row_gap))
+
+    # Label for final output
+    label_y = 2 * scaled_h + row_gap + 4
+    draw.text((col_x + 2, label_y), "FINAL (stabilized)", fill=(255, 255, 255), font=font)
+    draw.text((col_x + 2, label_y + 13), f"{out_w}x{out_h}", fill=(150, 150, 150), font=font_small)
+
+    # Add row labels on the left side
+    draw.text((3, 3), "INPUT", fill=(255, 255, 255, 200), font=font_small)
+    draw.text((3, scaled_h + row_gap + 3), "OUTPUT", fill=(255, 255, 255, 200), font=font_small)
+
+    preview.show(title="Pixel Snapper - Top Candidates")
 
 
 def parse_args(argv: Sequence[str]) -> Config:
