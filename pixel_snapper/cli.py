@@ -22,6 +22,7 @@ from .grid import (
     stabilize_both_axes,
     walk_with_offset,
 )
+from .hough import detect_grid_hough
 from .profile import compute_profiles
 from .quantize import quantize_image
 from .resample import resample
@@ -226,6 +227,16 @@ def process_image_bytes_with_grid(
             )
             candidates_with_source.append((
                 pk_col_cuts, pk_row_cuts, pk_step_x, "peak-based"
+            ))
+
+        # Candidate: Hough transform-based detection
+        hough_result = detect_grid_hough(quantized)
+        if hough_result is not None:
+            hough_col_cuts, hough_row_cuts = hough_result
+            # Estimate step from the detected grid
+            hough_step = width / max(len(hough_col_cuts) - 1, 1)
+            candidates_with_source.append((
+                hough_col_cuts, hough_row_cuts, hough_step, "hough"
             ))
 
         # Candidates from common cell sizes
