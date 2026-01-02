@@ -27,6 +27,7 @@ from .profile import compute_profiles
 from .quantize import quantize_image
 from .resample import resample
 from .scoring import ScoredCandidate, compute_expected_step, score_all_candidates
+from .qwen import maybe_apply_qwen_edit
 
 
 def _detect_grid_cuts(
@@ -73,6 +74,7 @@ class ProcessingResult:
     row_cuts: List[int]
     scored_candidates: List[ScoredCandidate] = None  # Top candidates with scores
     quantized_img: Optional[Image.Image] = None  # For preview rendering
+    processed_input_bytes: Optional[bytes] = None  # Input after optional pre-processing
 
     def __post_init__(self):
         if self.scored_candidates is None:
@@ -111,6 +113,8 @@ def process_image_bytes_with_grid(
         ProcessingResult with output bytes and grid cuts.
     """
     config = config or Config()
+
+    input_bytes = maybe_apply_qwen_edit(input_bytes, config)
 
     t0 = time.perf_counter()
     img = Image.open(io.BytesIO(input_bytes)).convert("RGBA")
@@ -402,6 +406,7 @@ def process_image_bytes_with_grid(
         row_cuts=row_cuts,
         scored_candidates=scored_candidates,
         quantized_img=quantized,
+        processed_input_bytes=input_bytes,
     )
 
 
@@ -421,10 +426,11 @@ def process_image(config: Config) -> None:
 
     print(f"Saved to: {config.output_path}")
     if config.preview:
+        preview_input_bytes = result.processed_input_bytes or img_bytes
         # Use candidate preview if we have scored candidates and quantized image
         if result.scored_candidates and result.quantized_img:
             preview_candidates(
-                img_bytes,
+                preview_input_bytes,
                 result.output_bytes,
                 result.scored_candidates,
                 result.col_cuts,
@@ -434,7 +440,7 @@ def process_image(config: Config) -> None:
         else:
             # Fall back to simple side-by-side preview
             preview_side_by_side(
-                img_bytes, result.output_bytes, result.col_cuts, result.row_cuts
+                preview_input_bytes, result.output_bytes, result.col_cuts, result.row_cuts
             )
 
 
@@ -737,22 +743,18 @@ def parse_args(argv: Sequence[str]) -> Config:
         PixelSnapperError: If arguments are invalid.
     """
     args = list(argv[1:])
-    preview = False
-    timing = False
+    config = Config()
     debug = False
-    palette: Optional[str] = None
-    palette_space = "lab"
-    resolution_hint: Optional[int] = None
     positional: List[str] = []
 
     i = 0
     while i < len(args):
         arg = args[i]
         if arg == "--preview":
-            preview = True
+            config.preview = True
             i += 1
         elif arg == "--timing":
-            timing = True
+            config.timing = True
             i += 1
         elif arg == "--debug":
             debug = True
@@ -760,12 +762,12 @@ def parse_args(argv: Sequence[str]) -> Config:
         elif arg == "--palette":
             if i + 1 >= len(args):
                 raise PixelSnapperError(_usage_message())
-            palette = args[i + 1]
+            config.palette = args[i + 1]
             i += 2
         elif arg == "--palette-space":
             if i + 1 >= len(args):
                 raise PixelSnapperError(_usage_message())
-            palette_space = args[i + 1].lower()
+            config.palette_space = args[i + 1].lower()
             i += 2
         elif arg == "--resolution-hint":
             if i + 1 >= len(args):
@@ -780,26 +782,91 @@ def parse_args(argv: Sequence[str]) -> Config:
                 raise PixelSnapperError(
                     f"Invalid resolution-hint value: '{args[i + 1]}'"
                 )
+            config.resolution_hint = resolution_hint
+            i += 2
+        elif arg == "--qwen":
+            config.qwen_enabled = True
+            i += 1
+        elif arg == "--qwen-prompt":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(_usage_message())
+            config.qwen_prompt = args[i + 1]
+            config.qwen_enabled = True
+            i += 2
+        elif arg == "--qwen-negative-prompt":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(_usage_message())
+            config.qwen_negative_prompt = args[i + 1]
+            config.qwen_enabled = True
+            i += 2
+        elif arg == "--qwen-model":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(_usage_message())
+            config.qwen_model = args[i + 1]
+            config.qwen_enabled = True
+            i += 2
+        elif arg == "--qwen-endpoint":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(_usage_message())
+            config.qwen_endpoint = args[i + 1]
+            config.qwen_enabled = True
+            i += 2
+        elif arg == "--qwen-size":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(_usage_message())
+            config.qwen_size = args[i + 1]
+            config.qwen_enabled = True
+            i += 2
+        elif arg == "--qwen-seed":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(_usage_message())
+            try:
+                qwen_seed = int(args[i + 1])
+                if qwen_seed < 0:
+                    raise PixelSnapperError("qwen-seed must be a non-negative integer")
+            except ValueError:
+                raise PixelSnapperError(
+                    f"Invalid qwen-seed value: '{args[i + 1]}'"
+                )
+            config.qwen_seed = qwen_seed
+            config.qwen_enabled = True
+            i += 2
+        elif arg == "--qwen-no-prompt-extend":
+            config.qwen_prompt_extend = False
+            config.qwen_enabled = True
+            i += 1
+        elif arg == "--qwen-watermark":
+            config.qwen_watermark = True
+            config.qwen_enabled = True
+            i += 1
+        elif arg == "--qwen-timeout":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(_usage_message())
+            try:
+                qwen_timeout = int(args[i + 1])
+                if qwen_timeout <= 0:
+                    raise PixelSnapperError(
+                        "qwen-timeout must be a positive integer"
+                    )
+            except ValueError:
+                raise PixelSnapperError(
+                    f"Invalid qwen-timeout value: '{args[i + 1]}'"
+                )
+            config.qwen_timeout = qwen_timeout
+            config.qwen_enabled = True
             i += 2
         else:
             positional.append(arg)
             i += 1
 
-    if palette_space not in ("rgb", "lab"):
+    if config.palette_space not in ("rgb", "lab"):
         raise PixelSnapperError("palette-space must be 'rgb' or 'lab'")
 
     if len(positional) < 2:
         raise PixelSnapperError(_usage_message())
 
-    config = Config(
-        input_path=positional[0],
-        output_path=positional[1],
-        preview=preview,
-        timing=timing,
-        palette=palette,
-        palette_space=palette_space,
-        resolution_hint=resolution_hint,
-    )
+    config.input_path = positional[0]
+    config.output_path = positional[1]
 
     if len(positional) >= 3:
         try:
@@ -836,7 +903,11 @@ def _usage_message() -> str:
     return (
         "Usage: python pixel_snapper.py input.png output.png [k_colors] "
         "[--palette NAME] [--palette-space rgb|lab] [--resolution-hint N] "
-        "[--preview] [--timing] [--debug]"
+        "[--preview] [--timing] [--debug] [--qwen] "
+        "[--qwen-prompt TEXT] [--qwen-negative-prompt TEXT] "
+        "[--qwen-model NAME] [--qwen-endpoint URL] [--qwen-size WxH] "
+        "[--qwen-seed INT] [--qwen-no-prompt-extend] [--qwen-watermark] "
+        "[--qwen-timeout SECONDS]"
     )
 
 

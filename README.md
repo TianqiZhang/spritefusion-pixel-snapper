@@ -46,6 +46,10 @@ python pixel_snapper.py input.png output.png --preview
 
 # Show timing information
 python pixel_snapper.py input.png output.png --timing
+
+# Photo -> Qwen cute pixel art -> Pixel Snapper
+# Requires DASHSCOPE_API_KEY in environment
+python pixel_snapper.py photo.jpg output.png --qwen
 ```
 
 ### Options
@@ -57,6 +61,16 @@ python pixel_snapper.py input.png output.png --timing
 | `--palette-space rgb\|lab` | Color matching space (default: lab) |
 | `--preview` | Show side-by-side preview with grid overlay |
 | `--timing` | Print timing breakdown |
+| `--qwen` | Enable Qwen image edit pre-step for photo-to-pixel-art |
+| `--qwen-prompt TEXT` | Override the default cute pixel art prompt |
+| `--qwen-negative-prompt TEXT` | Override the default negative prompt |
+| `--qwen-model NAME` | Select Qwen model (default: qwen-image-edit-plus) |
+| `--qwen-endpoint URL` | Override API endpoint (default: Singapore region) |
+| `--qwen-size WxH` | Set output size for Qwen (default: 512*512, only when output count = 1) |
+| `--qwen-seed INT` | Set Qwen random seed |
+| `--qwen-no-prompt-extend` | Disable prompt auto-expansion |
+| `--qwen-watermark` | Enable Qwen watermark |
+| `--qwen-timeout SECONDS` | Set Qwen request timeout |
 
 ### Python API
 
@@ -72,6 +86,10 @@ output_bytes = process_image_bytes(input_bytes)
 
 # Or customize
 config = Config(k_colors=8, palette="perler")
+output_bytes = process_image_bytes(input_bytes, config)
+
+# Photo -> Qwen cute pixel art -> Pixel Snapper
+config = Config(qwen_enabled=True)
 output_bytes = process_image_bytes(input_bytes, config)
 
 # Save result

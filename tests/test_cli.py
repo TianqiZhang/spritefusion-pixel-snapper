@@ -117,6 +117,24 @@ class TestParseArgs:
         assert config.palette == "hama"
         assert config.palette_space == "lab"
 
+    def test_qwen_flag(self) -> None:
+        """Should enable Qwen pre-processing."""
+        config = parse_args(["prog", "in.png", "out.png", "--qwen"])
+        assert config.qwen_enabled is True
+
+    def test_qwen_prompt(self) -> None:
+        """Should set Qwen prompt overrides."""
+        config = parse_args([
+            "prog", "in.png", "out.png",
+            "--qwen-prompt", "make it cute pixel art",
+            "--qwen-negative-prompt", "blurry",
+            "--qwen-model", "qwen-image-edit-plus-2025-12-15",
+        ])
+        assert config.qwen_enabled is True
+        assert config.qwen_prompt == "make it cute pixel art"
+        assert config.qwen_negative_prompt == "blurry"
+        assert config.qwen_model == "qwen-image-edit-plus-2025-12-15"
+
 
 class TestProcessImageBytes:
     """Tests for process_image_bytes function."""
