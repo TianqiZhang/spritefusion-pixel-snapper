@@ -1,0 +1,19 @@
+{
+  "session_name": "qwen_prompt_tuning",
+  "test_image_path": "test_photos/cat1.webp",
+  "output_dir": "rounds",
+  "prompt_variations_per_round": 3,
+  "qwen_model": "qwen-image-edit-plus",
+  "qwen_endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+  "qwen_negative_prompt": "photorealistic, realistic, high detail, full body, extra limbs, mirrored, background, gradients, shadow, text, watermark",
+  "qwen_prompt_extend": true,
+  "qwen_watermark": false,
+  "qwen_output_count": 1,
+  "qwen_output_index": 0,
+  "qwen_size": "512*512",
+  "qwen_seed": null,
+  "qwen_timeout": 120,
+  "log_file": "rounds.jsonl",
+  "feedback_log_file": "feedback.jsonl",
+  "best_prompt_file": "best_prompt.txt"
+}

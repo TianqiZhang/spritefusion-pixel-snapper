@@ -1,0 +1,5 @@
+Use the photo as a strict composition reference: preserve the silhouette, pose, and framing without adding or swapping limbs. If only part of the body is visible, keep only that visible portion. Convert to adorable chibi-style, very-low-resolution pixel art in a bead-grid style with solid bright colors and no gradients. Remove the background and replace it with a flat pure white (#FFFFFF) backdrop, no shadows and no transparency.
+
+Create an adorable chibi-style bead pixel art version that matches the original posture, gesture, and crop exactly, with left/right orientation unchanged. Do not extend the body beyond what is visible. Render on a clear grid with solid bright colors and no gradients. The background must be pure white (#FFFFFF), clean and empty.
+
+Strictly preserve the pose and framing from the photo (no mirroring, no added body parts). Turn it into low-res bead-style pixel art with a limited bright palette, no gradients. Remove any background detail and output a flat pure white (#FFFFFF) background with zero transparency.
