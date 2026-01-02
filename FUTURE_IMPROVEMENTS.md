@@ -2,7 +2,7 @@
 
 This document tracks potential improvements to the grid detection algorithm that haven't been implemented yet.
 
-## Implemented (v1.1)
+## Implemented
 
 - **Autocorrelation-based period detection** - FFT-based step size estimation, more robust to noise
 - **Grid offset detection** - Handles images with margins/borders
@@ -16,7 +16,8 @@ This document tracks potential improvements to the grid detection algorithm that
 
 **Impact:** Medium | **Effort:** Low
 
-Apply Gaussian smoothing to gradient profiles before peak detection to reduce noise from anti-aliasing and compression artifacts.
+Apply Gaussian smoothing to gradient profiles before peak detection to reduce noise
+from anti-aliasing and compression artifacts.
 
 **Location:** `pixel_snapper/profile.py`
 
@@ -41,13 +42,18 @@ smooth_profiles: bool = True
 smooth_sigma: float = 1.5
 ```
 
+**Notes:**
+- Requires adding `scipy` (for `gaussian_filter1d`) or implementing a small
+  1D Gaussian kernel in NumPy.
+
 ---
 
 ### 2. Sobel Gradient Kernels
 
 **Impact:** Medium | **Effort:** Low
 
-Replace the simple 2-pixel difference gradient with proper 3x3 Sobel operators. Sobel kernels provide better noise resistance and detect diagonal edges.
+Replace the simple 2-pixel difference gradient with proper 3x3 Sobel operators.
+Sobel kernels provide better noise resistance and detect diagonal edges.
 
 **Location:** `pixel_snapper/profile.py`
 
@@ -80,8 +86,8 @@ use_sobel_gradients: bool = True
 ```
 
 **Notes:**
-- Requires `scipy` dependency (already used elsewhere)
-- Could also try Scharr operator for even better rotation invariance
+- Requires adding `scipy` or using `opencv-python` (if available) for Sobel kernels.
+- Could also try the Scharr operator for better rotation invariance.
 
 ---
 

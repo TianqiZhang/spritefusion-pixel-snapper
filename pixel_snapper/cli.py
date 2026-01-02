@@ -787,74 +787,10 @@ def parse_args(argv: Sequence[str]) -> Config:
         elif arg == "--qwen":
             config.qwen_enabled = True
             i += 1
-        elif arg == "--qwen-prompt":
-            if i + 1 >= len(args):
-                raise PixelSnapperError(_usage_message())
-            config.qwen_prompt = args[i + 1]
-            config.qwen_enabled = True
-            i += 2
-        elif arg == "--qwen-negative-prompt":
-            if i + 1 >= len(args):
-                raise PixelSnapperError(_usage_message())
-            config.qwen_negative_prompt = args[i + 1]
-            config.qwen_enabled = True
-            i += 2
-        elif arg == "--qwen-model":
-            if i + 1 >= len(args):
-                raise PixelSnapperError(_usage_message())
-            config.qwen_model = args[i + 1]
-            config.qwen_enabled = True
-            i += 2
-        elif arg == "--qwen-endpoint":
-            if i + 1 >= len(args):
-                raise PixelSnapperError(_usage_message())
-            config.qwen_endpoint = args[i + 1]
-            config.qwen_enabled = True
-            i += 2
-        elif arg == "--qwen-size":
-            if i + 1 >= len(args):
-                raise PixelSnapperError(_usage_message())
-            config.qwen_size = args[i + 1]
-            config.qwen_enabled = True
-            i += 2
-        elif arg == "--qwen-seed":
-            if i + 1 >= len(args):
-                raise PixelSnapperError(_usage_message())
-            try:
-                qwen_seed = int(args[i + 1])
-                if qwen_seed < 0:
-                    raise PixelSnapperError("qwen-seed must be a non-negative integer")
-            except ValueError:
-                raise PixelSnapperError(
-                    f"Invalid qwen-seed value: '{args[i + 1]}'"
-                )
-            config.qwen_seed = qwen_seed
-            config.qwen_enabled = True
-            i += 2
-        elif arg == "--qwen-no-prompt-extend":
-            config.qwen_prompt_extend = False
-            config.qwen_enabled = True
-            i += 1
-        elif arg == "--qwen-watermark":
-            config.qwen_watermark = True
-            config.qwen_enabled = True
-            i += 1
-        elif arg == "--qwen-timeout":
-            if i + 1 >= len(args):
-                raise PixelSnapperError(_usage_message())
-            try:
-                qwen_timeout = int(args[i + 1])
-                if qwen_timeout <= 0:
-                    raise PixelSnapperError(
-                        "qwen-timeout must be a positive integer"
-                    )
-            except ValueError:
-                raise PixelSnapperError(
-                    f"Invalid qwen-timeout value: '{args[i + 1]}'"
-                )
-            config.qwen_timeout = qwen_timeout
-            config.qwen_enabled = True
-            i += 2
+        elif arg.startswith("--qwen-"):
+            raise PixelSnapperError(
+                f"Unsupported Qwen option '{arg}'. Use Config defaults or code overrides."
+            )
         else:
             positional.append(arg)
             i += 1
@@ -903,11 +839,7 @@ def _usage_message() -> str:
     return (
         "Usage: python pixel_snapper.py input.png output.png [k_colors] "
         "[--palette NAME] [--palette-space rgb|lab] [--resolution-hint N] "
-        "[--preview] [--timing] [--debug] [--qwen] "
-        "[--qwen-prompt TEXT] [--qwen-negative-prompt TEXT] "
-        "[--qwen-model NAME] [--qwen-endpoint URL] [--qwen-size WxH] "
-        "[--qwen-seed INT] [--qwen-no-prompt-extend] [--qwen-watermark] "
-        "[--qwen-timeout SECONDS]"
+        "[--preview] [--timing] [--debug] [--qwen]"
     )
 
 

@@ -122,18 +122,13 @@ class TestParseArgs:
         config = parse_args(["prog", "in.png", "out.png", "--qwen"])
         assert config.qwen_enabled is True
 
-    def test_qwen_prompt(self) -> None:
-        """Should set Qwen prompt overrides."""
-        config = parse_args([
-            "prog", "in.png", "out.png",
-            "--qwen-prompt", "make it cute pixel art",
-            "--qwen-negative-prompt", "blurry",
-            "--qwen-model", "qwen-image-edit-plus-2025-12-15",
-        ])
-        assert config.qwen_enabled is True
-        assert config.qwen_prompt == "make it cute pixel art"
-        assert config.qwen_negative_prompt == "blurry"
-        assert config.qwen_model == "qwen-image-edit-plus-2025-12-15"
+    def test_qwen_override_not_supported(self) -> None:
+        """Should reject unsupported Qwen override flags."""
+        with pytest.raises(PixelSnapperError, match="Unsupported Qwen option"):
+            parse_args([
+                "prog", "in.png", "out.png",
+                "--qwen-prompt", "make it cute pixel art",
+            ])
 
 
 class TestProcessImageBytes:
