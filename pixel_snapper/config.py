@@ -49,7 +49,7 @@ class Config:
     qwen_api_key: Optional[str] = None
     qwen_model: str = "qwen-image-edit-plus"
     qwen_endpoint: str = (
-        "https://dashscope-intl.aliyuncs.com/api/v1/services/"
+        "https://dashscope.aliyuncs.com/api/v1/services/"
         "aigc/multimodal-generation/generation"
     )
     qwen_prompt: str = (

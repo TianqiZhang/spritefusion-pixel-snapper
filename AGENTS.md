@@ -5,7 +5,8 @@
 
 ## Entry points
 - CLI: `pixel_snapper/cli.py` (with `pixel_snapper.py` as a legacy wrapper).
-- Public API: `pixel_snapper/__init__.py` (`process_image_bytes*`, `main`).
+- Public API (POC; not stable): `pixel_snapper/__init__.py` (common entry points like
+  `process_image_bytes*`, `process_image`, `main`).
 
 ## Key modules and responsibilities
 - `pixel_snapper/cli.py`: argument parsing, preview rendering, orchestrates pipeline.
@@ -34,13 +35,15 @@
 
 ## Palettes
 - Palette CSVs live in `colors/`.
-- `pixel_snapper/palette.py` expects RGB in columns 3-5 and LAB in columns 9-11.
+- Column layout (0-based indexes): `[reference_code, name, symbol, rgb_r, rgb_g, rgb_b,
+  hsl_h, hsl_s, hsl_l, lab_l, lab_a, lab_b, contributor]`.
+- `pixel_snapper/palette.py` reads RGB from columns 3-5 and LAB from columns 9-11.
 - Palettes can be referenced by name (`perler`) or by explicit path.
 
 ## Tests and fixtures
 - Pytest config: `pytest.ini` (`-v --tb=short`).
 - Fixtures in `tests/conftest.py` generate synthetic grid images.
-- `testdata/` contains sample inputs and expected outputs for integration tests.
+- `testdata/` contains manual test images used by `benchmark_scoring.py` (not used in tests).
 - Benchmark script: `benchmark_scoring.py`.
 
 ## Common pitfalls
