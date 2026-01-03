@@ -175,7 +175,9 @@ def process_image_bytes_with_grid(
     expected_step_x = compute_expected_step(step_x_autocorr, step_x_peaks, conf_x)
     expected_step_y = compute_expected_step(step_y_autocorr, step_y_peaks, conf_y)
     if expected_step_x is not None and expected_step_y is not None:
-        expected_step = (expected_step_x + expected_step_y) / 2.0
+        expected_step, _ = resolve_step_sizes(
+            expected_step_x, expected_step_y, width, height, config
+        )
     elif expected_step_x is not None:
         expected_step = expected_step_x
     elif expected_step_y is not None:
