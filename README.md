@@ -46,6 +46,14 @@ python pixel_snapper.py input.png output.png 8
 # Use a bead palette
 python pixel_snapper.py input.png output.png --palette perler
 
+# Use a bead palette and emit a printable pattern PDF
+python pixel_snapper.py input.png output.png --palette perler --pattern-format pdf
+
+# By default, pattern output is saved as output_pattern.pdf
+
+# Override bead pattern output path or format
+python pixel_snapper.py input.png output.png --palette perler --pattern-out pattern.pdf
+
 # Preview with grid visualization
 python pixel_snapper.py input.png output.png --preview
 
@@ -69,6 +77,8 @@ python pixel_snapper.py photo.jpg output.png --qwen
 |--------|-------------|
 | `k_colors` | Number of colors for K-means quantization (default: 16) |
 | `--palette NAME` | Use a predefined palette (perler, artkal_a, hama, etc.) |
+| `--pattern-out PATH` | Override bead pattern output path (requires `--palette`) |
+| `--pattern-format pdf\|png` | Bead pattern output format (default: pdf) |
 | `--palette-space rgb\|lab` | Color matching space (default: lab) |
 | `--resolution-hint N` | Hint for max cells on the long axis (filters candidates) |
 | `--preview` | Show preview with grid overlay (requires GUI) |
@@ -143,7 +153,7 @@ fixed step sizes) and scores them for the best fit. See
 
 ## Project Notes
 
-See `agent.md` for a module map and contributor-focused notes.
+See `AGENTS.md` for a module map and contributor-focused notes.
 
 ## Running Tests
 

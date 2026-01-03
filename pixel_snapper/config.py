@@ -41,6 +41,8 @@ class Config:
     timing: bool = False
     palette: Optional[str] = None
     palette_space: str = "lab"
+    pattern_output: Optional[str] = None
+    pattern_format: str = "pdf"
 
     # Enhanced grid detection options
     use_autocorrelation: bool = True

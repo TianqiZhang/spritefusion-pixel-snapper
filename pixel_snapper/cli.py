@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ from .profile import compute_profiles
 from .quantize import quantize_image
 from .resample import resample
 from .scoring import ScoredCandidate, compute_expected_step, score_all_candidates
+from .pattern import render_bead_pattern
 from .qwen import maybe_apply_qwen_edit
 
 
@@ -427,6 +429,26 @@ def process_image(config: Config) -> None:
         f.write(result.output_bytes)
 
     print(f"Saved to: {config.output_path}")
+
+    if config.pattern_output and not config.palette:
+        raise PixelSnapperError("pattern output requires --palette")
+
+    if config.palette:
+        pattern_path = config.pattern_output or _default_pattern_path(
+            config.output_path, config.pattern_format
+        )
+        output_img = Image.open(io.BytesIO(result.output_bytes)).convert("RGB")
+        pattern_img = render_bead_pattern(
+            output_img,
+            config.palette,
+            title=os.path.basename(config.input_path),
+        )
+        pattern_img.save(
+            pattern_path,
+            format=config.pattern_format.upper(),
+            dpi=(300, 300),
+        )
+        print(f"Saved pattern to: {pattern_path}")
     if config.preview:
         preview_input_bytes = result.processed_input_bytes or img_bytes
         # Use candidate preview if we have scored candidates and quantized image
@@ -444,6 +466,11 @@ def process_image(config: Config) -> None:
             preview_side_by_side(
                 preview_input_bytes, result.output_bytes, result.col_cuts, result.row_cuts
             )
+
+
+def _default_pattern_path(output_path: str, pattern_format: str) -> str:
+    base, _ = os.path.splitext(output_path)
+    return f"{base}_pattern.{pattern_format}"
 
 
 def preview_side_by_side(
@@ -766,6 +793,16 @@ def parse_args(argv: Sequence[str]) -> Config:
                 raise PixelSnapperError(_usage_message())
             config.palette = args[i + 1]
             i += 2
+        elif arg == "--pattern-out":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(_usage_message())
+            config.pattern_output = args[i + 1]
+            i += 2
+        elif arg == "--pattern-format":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(_usage_message())
+            config.pattern_format = args[i + 1].lower()
+            i += 2
         elif arg == "--palette-space":
             if i + 1 >= len(args):
                 raise PixelSnapperError(_usage_message())
@@ -799,6 +836,8 @@ def parse_args(argv: Sequence[str]) -> Config:
 
     if config.palette_space not in ("rgb", "lab"):
         raise PixelSnapperError("palette-space must be 'rgb' or 'lab'")
+    if config.pattern_format not in ("pdf", "png"):
+        raise PixelSnapperError("pattern-format must be 'pdf' or 'png'")
 
     if len(positional) < 2:
         raise PixelSnapperError(_usage_message())
@@ -840,8 +879,9 @@ def _usage_message() -> str:
     """Return usage message string."""
     return (
         "Usage: python pixel_snapper.py input.png output.png [k_colors] "
-        "[--palette NAME] [--palette-space rgb|lab] [--resolution-hint N] "
-        "[--preview] [--timing] [--debug] [--qwen]"
+        "[--palette NAME] [--pattern-out PATH] [--pattern-format pdf|png] "
+        "[--palette-space rgb|lab] [--resolution-hint N] [--preview] "
+        "[--timing] [--debug] [--qwen]"
     )
 
 

@@ -17,6 +17,18 @@ class Palette:
     lab: List[Tuple[float, float, float]]
 
 
+@dataclass
+class PaletteEntry:
+    """A palette color entry with metadata."""
+
+    reference_code: str
+    name: str
+    symbol: str
+    rgb: Tuple[int, int, int]
+    lab: Tuple[float, float, float]
+    contributor: str
+
+
 def resolve_palette_path(palette_name: str) -> str:
     """Resolve a palette name to its file path.
 
@@ -91,3 +103,54 @@ def load_palette(palette_name: str) -> Palette:
     if not colors:
         raise PixelSnapperError(f"No colors found in palette: {palette_path}")
     return Palette(rgb=colors, lab=lab_colors)
+
+
+def load_palette_entries(palette_name: str) -> List[PaletteEntry]:
+    """Load palette entries with metadata from a CSV file.
+
+    Args:
+        palette_name: Palette name or path.
+
+    Returns:
+        List of palette entries with metadata.
+
+    Raises:
+        PixelSnapperError: If palette cannot be loaded.
+    """
+    palette_path = resolve_palette_path(palette_name)
+    entries: List[PaletteEntry] = []
+
+    with open(palette_path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if not row:
+                continue
+            try:
+                reference_code = row[0]
+                name = row[1]
+                symbol = row[2]
+                r = int(row[3])
+                g = int(row[4])
+                b = int(row[5])
+                lab_l = float(row[9])
+                lab_a = float(row[10])
+                lab_b = float(row[11])
+                contributor = row[12] if len(row) > 12 else ""
+            except (IndexError, ValueError) as exc:
+                raise PixelSnapperError(
+                    f"Invalid palette row in {palette_path}: {row}"
+                ) from exc
+            entries.append(
+                PaletteEntry(
+                    reference_code=reference_code,
+                    name=name,
+                    symbol=symbol,
+                    rgb=(r, g, b),
+                    lab=(lab_l, lab_a, lab_b),
+                    contributor=contributor,
+                )
+            )
+
+    if not entries:
+        raise PixelSnapperError(f"No colors found in palette: {palette_path}")
+    return entries

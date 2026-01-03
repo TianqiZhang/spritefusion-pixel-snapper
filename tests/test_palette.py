@@ -7,7 +7,12 @@ import tempfile
 import pytest
 
 from pixel_snapper.config import PixelSnapperError
-from pixel_snapper.palette import Palette, load_palette, resolve_palette_path
+from pixel_snapper.palette import (
+    Palette,
+    load_palette,
+    load_palette_entries,
+    resolve_palette_path,
+)
 
 
 class TestResolvePalettePath:
@@ -60,6 +65,20 @@ class TestLoadPalette:
         assert len(palette.lab) == 2
         assert palette.rgb[0] == (255, 0, 0)
         assert palette.rgb[1] == (0, 255, 0)
+
+    def test_load_palette_entries(self, tmp_path) -> None:
+        """Should load palette entries with metadata."""
+        palette_file = tmp_path / "test.csv"
+        palette_file.write_text(
+            "1,Red,R,255,0,0,0,1,0.5,53.23,80.11,67.22,test\n"
+            "2,Green,G,0,255,0,120,1,0.5,87.74,-86.18,83.18,test\n"
+        )
+        entries = load_palette_entries(str(palette_file))
+        assert len(entries) == 2
+        assert entries[0].reference_code == "1"
+        assert entries[0].name == "Red"
+        assert entries[0].symbol == "R"
+        assert entries[0].rgb == (255, 0, 0)
 
     def test_empty_palette_error(self, tmp_path) -> None:
         """Should raise error for empty palette."""
