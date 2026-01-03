@@ -11,6 +11,15 @@ class PixelSnapperError(Exception):
     pass
 
 
+DEFAULT_QWEN_PROMPT = (
+    "Transform main object in the image into pixel art style, keep same pose but "
+    "convert to chibi style, low-resolution, 32x32 dot matrix, coarse pixels, "
+    "chibi style, 8-bit retro game sprite, blocky, hard edges, aliased, isolated "
+    "on a flat white background. Minimalist details, no anti-aliasing."
+)
+DEFAULT_QWEN_NEGATIVE_PROMPT = "high resolution, detailed, realistic, background"
+
+
 @dataclass
 class Config:
     """Configuration for the pixel snapping pipeline."""
@@ -47,24 +56,11 @@ class Config:
     # Qwen image edit pre-processing
     qwen_enabled: bool = False
     qwen_api_key: Optional[str] = None
-    qwen_model: str = "qwen-image-edit-plus"
-    qwen_endpoint: str = (
-        "https://dashscope.aliyuncs.com/api/v1/services/"
-        "aigc/multimodal-generation/generation"
-    )
-    qwen_prompt: str = (
-        "Transform the subject in this photo into a chibi-style cartoon character - "
-        "cute, with a slightly oversized head, large eyes, and simplified features - "
-        "then remove all background and render the entire image as a very-low-resolution "
-        "pixel art pattern in the style of Perler or Hama fuse beads. Use a limited "
-        "palette of solid, bright colors with no gradients. Each pixel should "
-        "represent a single bead (circular or square), arranged on a clear grid. "
-        "Keep the composition simple and recognizable, suitable for actual bead "
-        "crafting. Preserve key traits (e.g., hairstyle, species, pose, or object "
-        "shape) but stylize them in an adorable, minimal chibi pixel form."
-    )
-    qwen_negative_prompt: str = "high resolution, detailed, realistic, background"
-    qwen_prompt_extend: bool = True
+    qwen_model: Optional[str] = None
+    qwen_endpoint: Optional[str] = None
+    qwen_prompt: str = DEFAULT_QWEN_PROMPT
+    qwen_negative_prompt: str = DEFAULT_QWEN_NEGATIVE_PROMPT
+    qwen_prompt_extend: bool = False
     qwen_watermark: bool = False
     qwen_output_count: int = 1
     qwen_output_index: int = 0

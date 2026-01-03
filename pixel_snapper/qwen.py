@@ -11,26 +11,17 @@ from typing import Any, Dict, Optional
 
 from PIL import Image
 
-from .config import Config, PixelSnapperError
+from .config import (
+    Config,
+    DEFAULT_QWEN_NEGATIVE_PROMPT,
+    DEFAULT_QWEN_PROMPT,
+    PixelSnapperError,
+)
 
 DEFAULT_QWEN_ENDPOINT = (
     "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
 )
 DEFAULT_QWEN_MODEL = "qwen-image-edit-plus"
-DEFAULT_QWEN_PROMPT = (
-    "Transform the subject in this photo into a chibi-style cartoon character - "
-    "cute, with a slightly oversized head, large eyes, and simplified features - "
-    "then remove all background and render the entire image as a low-resolution "
-    "pixel art pattern in the style of Perler or Hama fuse beads. Use a limited "
-    "palette of solid, bright colors with no gradients. Each pixel should "
-    "represent a single bead (circular or square), arranged on a clear grid. "
-    "Keep the composition simple and recognizable, suitable for actual bead "
-    "crafting. Preserve key traits (e.g., hairstyle, species, pose, or object "
-    "shape) but stylize them in an adorable, minimal chibi pixel form."
-)
-DEFAULT_QWEN_NEGATIVE_PROMPT = (
-    "blurry, low quality, photorealistic, noisy, text, watermark"
-)
 
 _FORMAT_TO_MIME = {
     "PNG": "image/png",

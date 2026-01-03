@@ -6,7 +6,7 @@
   "qwen_model": "qwen-image-edit-plus",
   "qwen_endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
   "qwen_negative_prompt": "photorealistic, realistic, high detail, full body, extra limbs, mirrored, background, gradients, shadow, text, watermark",
-  "qwen_prompt_extend": true,
+  "qwen_prompt_extend": false,
   "qwen_watermark": false,
   "qwen_output_count": 1,
   "qwen_output_index": 0,
