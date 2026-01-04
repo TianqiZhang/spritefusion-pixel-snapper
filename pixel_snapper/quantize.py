@@ -11,6 +11,34 @@ from .config import Config, PixelSnapperError
 from .palette import Palette, load_palette
 
 
+def _find_nearest_chunked(
+    data: np.ndarray,
+    targets: np.ndarray,
+    chunk_size: int = 100_000,
+) -> np.ndarray:
+    """Find index of nearest target for each data point using chunked processing.
+
+    Uses squared Euclidean distance. Processes in chunks to limit memory usage
+    when dealing with large arrays.
+
+    Args:
+        data: Array of shape (N, D) with data points.
+        targets: Array of shape (K, D) with target points.
+        chunk_size: Chunk size for memory-efficient processing.
+
+    Returns:
+        Array of shape (N,) with indices of nearest targets.
+    """
+    nearest = np.empty(data.shape[0], dtype=np.int64)
+    for start in range(0, data.shape[0], chunk_size):
+        end = min(start + chunk_size, data.shape[0])
+        chunk = data[start:end]
+        diff = chunk[:, None, :] - targets[None, :, :]
+        dists = np.sum(diff * diff, axis=2)
+        nearest[start:end] = np.argmin(dists, axis=1)
+    return nearest
+
+
 def quantize_image(img: Image.Image, config: Config) -> Image.Image:
     """Quantize an image to reduce colors.
 
@@ -189,14 +217,8 @@ def _apply_centroids(
     flat = arr.reshape(-1, 4)
     flat_mask = flat[:, 3] != 0
     rgb = flat[flat_mask, :3].astype(np.float64)
-    nearest = np.empty(rgb.shape[0], dtype=np.int64)
 
-    for start in range(0, rgb.shape[0], chunk_size):
-        end = min(start + chunk_size, rgb.shape[0])
-        chunk = rgb[start:end]
-        diff = chunk[:, None, :] - centroids[None, :, :]
-        dists = np.sum(diff * diff, axis=2)
-        nearest[start:end] = np.argmin(dists, axis=1)
+    nearest = _find_nearest_chunked(rgb, centroids, chunk_size)
 
     new_rgb = np.rint(centroids[nearest]).clip(0, 255).astype(np.uint8)
     flat_out = flat.copy()
@@ -230,21 +252,13 @@ def palette_quantize(
     palette_lab = np.array(palette.lab, dtype=np.float64)
 
     if space == "lab":
-        rgb_lab = rgb_to_lab(rgb)
+        data = rgb_to_lab(rgb)
         target_palette = palette_lab
     else:
-        rgb_lab = rgb
+        data = rgb
         target_palette = palette_rgb
 
-    chunk_size = 100_000
-    nearest = np.empty(rgb_lab.shape[0], dtype=np.int64)
-
-    for start in range(0, rgb_lab.shape[0], chunk_size):
-        end = min(start + chunk_size, rgb_lab.shape[0])
-        chunk = rgb_lab[start:end]
-        diff = chunk[:, None, :] - target_palette[None, :, :]
-        dists = np.sum(diff * diff, axis=2)
-        nearest[start:end] = np.argmin(dists, axis=1)
+    nearest = _find_nearest_chunked(data, target_palette)
 
     mapped = np.rint(palette_rgb[nearest]).clip(0, 255).astype(np.uint8)
     flat_out = flat.copy()

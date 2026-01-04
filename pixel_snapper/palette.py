@@ -65,44 +65,43 @@ def resolve_palette_path(palette_name: str) -> str:
     raise PixelSnapperError(f"Palette not found: {palette_name}.{hint}")
 
 
-def load_palette(palette_name: str) -> Palette:
-    """Load a palette from a CSV file.
+def _parse_palette_row(row: List[str], palette_path: str) -> PaletteEntry:
+    """Parse a single CSV row into a PaletteEntry.
 
     Args:
-        palette_name: Palette name or path.
+        row: CSV row as list of strings.
+        palette_path: Path to palette file (for error messages).
 
     Returns:
-        Palette with RGB and LAB colors.
+        Parsed PaletteEntry.
 
     Raises:
-        PixelSnapperError: If palette cannot be loaded.
+        PixelSnapperError: If row format is invalid.
     """
-    palette_path = resolve_palette_path(palette_name)
-    colors: List[Tuple[int, int, int]] = []
-    lab_colors: List[Tuple[float, float, float]] = []
+    try:
+        reference_code = row[0]
+        name = row[1]
+        symbol = row[2]
+        r = int(row[3])
+        g = int(row[4])
+        b = int(row[5])
+        lab_l = float(row[9])
+        lab_a = float(row[10])
+        lab_b = float(row[11])
+        contributor = row[12] if len(row) > 12 else ""
+    except (IndexError, ValueError) as exc:
+        raise PixelSnapperError(
+            f"Invalid palette row in {palette_path}: {row}"
+        ) from exc
 
-    with open(palette_path, newline="", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        for row in reader:
-            if not row:
-                continue
-            try:
-                r = int(row[3])
-                g = int(row[4])
-                b = int(row[5])
-                lab_l = float(row[9])
-                lab_a = float(row[10])
-                lab_b = float(row[11])
-            except (IndexError, ValueError) as exc:
-                raise PixelSnapperError(
-                    f"Invalid palette row in {palette_path}: {row}"
-                ) from exc
-            colors.append((r, g, b))
-            lab_colors.append((lab_l, lab_a, lab_b))
-
-    if not colors:
-        raise PixelSnapperError(f"No colors found in palette: {palette_path}")
-    return Palette(rgb=colors, lab=lab_colors)
+    return PaletteEntry(
+        reference_code=reference_code,
+        name=name,
+        symbol=symbol,
+        rgb=(r, g, b),
+        lab=(lab_l, lab_a, lab_b),
+        contributor=contributor,
+    )
 
 
 def load_palette_entries(palette_name: str) -> List[PaletteEntry]:
@@ -125,32 +124,27 @@ def load_palette_entries(palette_name: str) -> List[PaletteEntry]:
         for row in reader:
             if not row:
                 continue
-            try:
-                reference_code = row[0]
-                name = row[1]
-                symbol = row[2]
-                r = int(row[3])
-                g = int(row[4])
-                b = int(row[5])
-                lab_l = float(row[9])
-                lab_a = float(row[10])
-                lab_b = float(row[11])
-                contributor = row[12] if len(row) > 12 else ""
-            except (IndexError, ValueError) as exc:
-                raise PixelSnapperError(
-                    f"Invalid palette row in {palette_path}: {row}"
-                ) from exc
-            entries.append(
-                PaletteEntry(
-                    reference_code=reference_code,
-                    name=name,
-                    symbol=symbol,
-                    rgb=(r, g, b),
-                    lab=(lab_l, lab_a, lab_b),
-                    contributor=contributor,
-                )
-            )
+            entries.append(_parse_palette_row(row, palette_path))
 
     if not entries:
         raise PixelSnapperError(f"No colors found in palette: {palette_path}")
     return entries
+
+
+def load_palette(palette_name: str) -> Palette:
+    """Load a palette from a CSV file.
+
+    Args:
+        palette_name: Palette name or path.
+
+    Returns:
+        Palette with RGB and LAB colors.
+
+    Raises:
+        PixelSnapperError: If palette cannot be loaded.
+    """
+    entries = load_palette_entries(palette_name)
+    return Palette(
+        rgb=[entry.rgb for entry in entries],
+        lab=[entry.lab for entry in entries],
+    )
