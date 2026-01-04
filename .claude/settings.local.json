@@ -6,7 +6,13 @@
       "Bash(python test_peaks.py:*)",
       "Bash(python:*)",
       "Bash(git checkout:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(git fetch:*)",
+      "Bash(git show:*)",
+      "Bash(git merge:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   }
 }
