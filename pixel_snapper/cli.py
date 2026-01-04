@@ -13,17 +13,22 @@ from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger("pixel_snapper")
 
+from .candidates import (
+    Candidate,
+    deduplicate_candidates,
+    filter_by_resolution_hint,
+    generate_candidates,
+    log_candidates,
+)
 from .config import Config, PixelSnapperError, validate_image_dimensions
 from .grid import (
     estimate_step_size,
     estimate_step_size_autocorr,
-    estimate_step_size_autocorr_multi,
     find_best_offset,
     resolve_step_sizes,
     stabilize_both_axes,
     walk_with_offset,
 )
-from .hough import detect_grid_hough
 from .profile import compute_profiles
 from .quantize import quantize_image
 from .resample import resample
@@ -192,155 +197,30 @@ def process_image_bytes_with_grid(
 
     # Build candidate grids if uniformity scoring is enabled
     if config.use_uniformity_scoring:
-        # Track candidates with their source for logging
-        candidates_with_source: List[Tuple[List[int], List[int], float, str]] = []
+        # Generate all candidates from various detection methods
+        candidates_with_source = generate_candidates(
+            profile_x=profile_x,
+            profile_y=profile_y,
+            width=width,
+            height=height,
+            config=config,
+            quantized_img=quantized,
+            step_x_autocorr=step_x_autocorr,
+            step_y_autocorr=step_y_autocorr,
+            step_x_peaks=step_x_peaks,
+            step_y_peaks=step_y_peaks,
+            detect_grid_cuts=_detect_grid_cuts,
+        )
 
-        # When resolution hint is provided, get multiple autocorrelation peaks
-        if config.resolution_hint and config.use_autocorrelation:
-            # Get multiple peaks from autocorrelation for more candidate options
-            multi_peaks_x = estimate_step_size_autocorr_multi(profile_x, config)
-            multi_peaks_y = estimate_step_size_autocorr_multi(profile_y, config)
-            logger.debug(
-                f"Multi-peak autocorr: X peaks={[(f'{s:.1f}', f'{c:.2f}') for s, c in multi_peaks_x]}, "
-                f"Y peaks={[(f'{s:.1f}', f'{c:.2f}') for s, c in multi_peaks_y]}"
-            )
-
-            # Add candidates from each peak combination
-            for step_x_ac, conf_x_ac in multi_peaks_x:
-                for step_y_ac, conf_y_ac in multi_peaks_y:
-                    ac_step_x, ac_step_y = resolve_step_sizes(
-                        step_x_ac, step_y_ac, width, height, config
-                    )
-                    ac_col_cuts, ac_row_cuts = _detect_grid_cuts(
-                        profile_x, profile_y, ac_step_x, ac_step_y,
-                        width, height, config
-                    )
-                    candidates_with_source.append((
-                        ac_col_cuts, ac_row_cuts, ac_step_x,
-                        f"autocorr({step_x_ac:.1f}x{step_y_ac:.1f})"
-                    ))
-
-            # Also add single-axis candidates if one axis has peaks
-            for step_x_ac, _ in multi_peaks_x:
-                ac_step_x, ac_step_y = resolve_step_sizes(
-                    step_x_ac, None, width, height, config
-                )
-                ac_col_cuts, ac_row_cuts = _detect_grid_cuts(
-                    profile_x, profile_y, ac_step_x, ac_step_y,
-                    width, height, config
-                )
-                candidates_with_source.append((
-                    ac_col_cuts, ac_row_cuts, ac_step_x,
-                    f"autocorr-x({step_x_ac:.1f})"
-                ))
-
-            for step_y_ac, _ in multi_peaks_y:
-                ac_step_x, ac_step_y = resolve_step_sizes(
-                    None, step_y_ac, width, height, config
-                )
-                ac_col_cuts, ac_row_cuts = _detect_grid_cuts(
-                    profile_x, profile_y, ac_step_x, ac_step_y,
-                    width, height, config
-                )
-                candidates_with_source.append((
-                    ac_col_cuts, ac_row_cuts, ac_step_x,
-                    f"autocorr-y({step_y_ac:.1f})"
-                ))
-        else:
-            # Original single-peak autocorrelation candidate
-            if step_x_autocorr is not None or step_y_autocorr is not None:
-                ac_step_x, ac_step_y = resolve_step_sizes(
-                    step_x_autocorr, step_y_autocorr, width, height, config
-                )
-                ac_col_cuts, ac_row_cuts = _detect_grid_cuts(
-                    profile_x, profile_y, ac_step_x, ac_step_y,
-                    width, height, config
-                )
-                candidates_with_source.append((
-                    ac_col_cuts, ac_row_cuts, ac_step_x, "autocorr"
-                ))
-
-        # Candidate: Traditional peak-based detection
-        if step_x_peaks is not None or step_y_peaks is not None:
-            pk_step_x, pk_step_y = resolve_step_sizes(
-                step_x_peaks, step_y_peaks, width, height, config
-            )
-            pk_col_cuts, pk_row_cuts = _detect_grid_cuts(
-                profile_x, profile_y, pk_step_x, pk_step_y, width, height, config
-            )
-            candidates_with_source.append((
-                pk_col_cuts, pk_row_cuts, pk_step_x, "peak-based"
-            ))
-
-        # Candidate: Hough transform-based detection
-        hough_result = detect_grid_hough(quantized)
-        if hough_result is not None:
-            hough_col_cuts, hough_row_cuts = hough_result
-            # Estimate step from the detected grid
-            hough_step = width / max(len(hough_col_cuts) - 1, 1)
-            candidates_with_source.append((
-                hough_col_cuts, hough_row_cuts, hough_step, "hough"
-            ))
-
-        # Candidates from common cell sizes
-        for candidate_step in config.uniformity_candidate_steps:
-            if candidate_step < min(width, height) / 2:
-                cand_col_cuts, cand_row_cuts = _detect_grid_cuts(
-                    profile_x, profile_y,
-                    float(candidate_step), float(candidate_step),
-                    width, height, config
-                )
-                candidates_with_source.append((
-                    cand_col_cuts, cand_row_cuts, float(candidate_step),
-                    f"fixed({candidate_step})"
-                ))
-
-        # Add hint-derived candidate (at the upper limit)
+        # Deduplicate and filter candidates
+        unique_candidates = deduplicate_candidates(candidates_with_source)
         if config.resolution_hint:
-            long_axis = max(width, height)
-            hint_step = long_axis / config.resolution_hint
-            hint_col_cuts, hint_row_cuts = _detect_grid_cuts(
-                profile_x, profile_y, hint_step, hint_step, width, height, config
+            unique_candidates = filter_by_resolution_hint(
+                unique_candidates, config.resolution_hint
             )
-            candidates_with_source.append((
-                hint_col_cuts, hint_row_cuts, hint_step,
-                f"hint({config.resolution_hint})"
-            ))
-
-        logger.debug(f"Generated {len(candidates_with_source)} candidates before dedup")
-
-        # Remove duplicate candidates (same grid result)
-        unique_candidates: List[Tuple[List[int], List[int], float, str]] = []
-        seen_grids: set = set()
-        for col_cuts, row_cuts, step, source in candidates_with_source:
-            grid_key = (tuple(col_cuts), tuple(row_cuts))
-            if grid_key not in seen_grids:
-                seen_grids.add(grid_key)
-                unique_candidates.append((col_cuts, row_cuts, step, source))
-
-        logger.debug(f"After dedup: {len(unique_candidates)} unique candidates")
-
-        # Filter candidates by resolution hint (upper limit)
-        if config.resolution_hint:
-            filtered_candidates: List[Tuple[List[int], List[int], float, str]] = []
-            for col_cuts, row_cuts, step, source in unique_candidates:
-                cells_x = len(col_cuts) - 1
-                cells_y = len(row_cuts) - 1
-                if max(cells_x, cells_y) <= config.resolution_hint:
-                    filtered_candidates.append((col_cuts, row_cuts, step, source))
-                else:
-                    logger.debug(
-                        f"  Filtered out: {source} -> {cells_x}x{cells_y} cells "
-                        f"(exceeds hint={config.resolution_hint})"
-                    )
-            unique_candidates = filtered_candidates
-            logger.debug(f"After hint filter: {len(unique_candidates)} candidates")
 
         # Log all candidates before scoring
-        for col_cuts, row_cuts, step, source in unique_candidates:
-            cells_x = len(col_cuts) - 1
-            cells_y = len(row_cuts) - 1
-            logger.debug(f"  Candidate: {source} -> {cells_x}x{cells_y} cells (step={step:.2f})")
+        log_candidates(unique_candidates)
 
         # Score all candidates and select best
         scored_candidates: List[ScoredCandidate] = []
