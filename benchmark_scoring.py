@@ -116,6 +116,8 @@ def normalize_source(source: str) -> str:
         return 'autocorr'
     elif source.startswith('hint'):
         return 'hint'
+    elif source.startswith('recon'):
+        return 'recon'
     # Keep fixed(N) as-is to see individual step sizes
     return source
 

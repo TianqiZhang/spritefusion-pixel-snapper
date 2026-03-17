@@ -16,6 +16,7 @@ from .grid import (
     resolve_step_sizes,
 )
 from .hough import detect_grid_hough
+from .reconstruction import generate_reconstruction_step_estimates
 
 logger = logging.getLogger("pixel_snapper")
 
@@ -41,6 +42,7 @@ def generate_candidates(
     step_x_peaks: Optional[float],
     step_y_peaks: Optional[float],
     detect_grid_cuts: DetectGridCutsFunc,
+    original_img: Optional[Image.Image] = None,
 ) -> List[Candidate]:
     """Generate all grid candidates from various detection methods.
 
@@ -56,6 +58,7 @@ def generate_candidates(
         step_x_peaks: Peak-based step estimate for X axis (or None).
         step_y_peaks: Peak-based step estimate for Y axis (or None).
         detect_grid_cuts: Function to generate grid cuts from step sizes.
+        original_img: Original (non-quantized) RGBA image for reconstruction candidates.
 
     Returns:
         List of candidate tuples (col_cuts, row_cuts, step_size, source).
@@ -107,6 +110,23 @@ def generate_candidates(
                 profile_x, profile_y, width, height, config, detect_grid_cuts
             )
         )
+
+    # Reconstruction-based step estimates (operates on original image)
+    # Reconstruction finds the best step sizes via variance minimization,
+    # then we feed those step sizes through detect_grid_cuts for edge-snapped
+    # cut placement, giving the best of both worlds.
+    if config.use_reconstruction and original_img is not None:
+        recon_steps = generate_reconstruction_step_estimates(
+            original_img, width, height, config,
+        )
+        for step, source_label in recon_steps:
+            recon_col_cuts, recon_row_cuts = detect_grid_cuts(
+                profile_x, profile_y, step, step,
+                width, height, config,
+            )
+            candidates.append((
+                recon_col_cuts, recon_row_cuts, step, source_label,
+            ))
 
     logger.debug(f"Generated {len(candidates)} candidates before dedup")
     return candidates

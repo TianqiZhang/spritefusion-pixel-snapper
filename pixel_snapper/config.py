@@ -55,6 +55,11 @@ class Config:
     # Resolution hint (upper limit on cells)
     resolution_hint: Optional[int] = None  # Max cells on long axis
 
+    # Reconstruction-based grid detection
+    use_reconstruction: bool = True
+    reconstruction_min_step: int = 3
+    reconstruction_max_step: int = 128
+
     # Qwen image edit pre-processing
     qwen_enabled: bool = False
     qwen_api_key: Optional[str] = None
