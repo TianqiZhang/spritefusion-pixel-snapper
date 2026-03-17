@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import io
 import sys
 import time
 from collections import defaultdict
@@ -22,6 +23,7 @@ from typing import Any, Dict, List, Optional
 from PIL import Image
 
 from pixel_snapper import Config, process_image_bytes_with_grid
+from pixel_snapper.ground_truth import grid_accuracy, ground_truth_dir, load_ground_truth
 from pixel_snapper.scoring import ScoredCandidate
 
 
@@ -37,6 +39,9 @@ class ImageResult:
     num_candidates: int
     all_candidates: List[Dict[str, Any]]
     processing_time_ms: float
+    winner_col_cuts: Optional[List[int]] = None
+    winner_row_cuts: Optional[List[int]] = None
+    ground_truth_accuracy: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -67,10 +72,9 @@ def process_image(image_path: Path, config: Config) -> ImageResult:
     with open(image_path, 'rb') as f:
         input_bytes = f.read()
 
-    # Get image dimensions
-    img = Image.open(image_path)
+    # Get image dimensions from the already-read bytes
+    img = Image.open(io.BytesIO(input_bytes))
     width, height = img.size
-    img.close()
 
     start_time = time.perf_counter()
     result = process_image_bytes_with_grid(input_bytes, config)
@@ -104,6 +108,8 @@ def process_image(image_path: Path, config: Config) -> ImageResult:
         num_candidates=len(result.scored_candidates) if result.scored_candidates else 0,
         all_candidates=candidates_data,
         processing_time_ms=round(elapsed_ms, 2),
+        winner_col_cuts=list(result.col_cuts),
+        winner_row_cuts=list(result.row_cuts),
     )
 
 
@@ -139,6 +145,16 @@ def run_benchmark(testdata_dir: Path, config: Config) -> BenchmarkResults:
     for img_path in images:
         print(f"Processing {img_path.name}...", end=" ", flush=True)
         result = process_image(img_path, config)
+
+        # Check for ground truth
+        gt_path = ground_truth_dir(testdata_dir) / f"{img_path.stem}.json"
+        if gt_path.exists() and result.winner_col_cuts and result.winner_row_cuts:
+            gt = load_ground_truth(gt_path)
+            result.ground_truth_accuracy = grid_accuracy(
+                result.winner_col_cuts, result.winner_row_cuts,
+                gt.col_cuts, gt.row_cuts,
+            )
+
         image_results.append(result)
         print(f"Winner: {result.winner_source} ({result.winner_grid_size}) "
               f"score={result.winner_score:.3f} [{result.num_candidates} candidates]")
@@ -216,6 +232,24 @@ def print_summary(results: BenchmarkResults) -> None:
     for source, rank in sorted_ranks:
         appearances = results.source_appearances.get(source, 0)
         print(f"  {source:20s}: {rank:.2f} (n={appearances})")
+
+    # Ground truth comparison
+    gt_rows = []
+    for ir in results.image_results:
+        acc = ir.get("ground_truth_accuracy")
+        if acc is not None:
+            gt_rows.append((ir["filename"], acc))
+
+    if gt_rows:
+        print()
+        print("GROUND TRUTH COMPARISON:")
+        print("-" * 60)
+        for fname, acc in gt_rows:
+            col_err = acc["col_error"]["mean_abs_error"]
+            row_err = acc["row_error"]["mean_abs_error"]
+            match_str = "(match)" if acc["cell_count_match"] else "(MISMATCH)"
+            cells_str = f"{acc['pred_cells']} vs {acc['gt_cells']} {match_str}" if not acc["cell_count_match"] else f"{acc['gt_cells']} {match_str}"
+            print(f"  {fname:16s}: col_err={col_err:.1f}px  row_err={row_err:.1f}px  cells: {cells_str}")
 
 
 def main() -> None:

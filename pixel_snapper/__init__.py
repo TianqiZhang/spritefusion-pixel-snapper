@@ -45,6 +45,14 @@ from .grid import (
     estimate_step_size_autocorr,
     find_best_offset,
 )
+from .ground_truth import (
+    GroundTruth,
+    cut_position_error,
+    grid_accuracy,
+    ground_truth_dir,
+    load_ground_truth,
+    save_ground_truth,
+)
 from .hough import detect_grid_hough
 from .scoring import (
     ScoredCandidate,
@@ -67,6 +75,13 @@ __all__ = [
     "estimate_step_size_autocorr",
     "find_best_offset",
     "detect_grid_hough",
+    # Ground truth
+    "GroundTruth",
+    "load_ground_truth",
+    "save_ground_truth",
+    "ground_truth_dir",
+    "cut_position_error",
+    "grid_accuracy",
     # Scoring
     "ScoredCandidate",
     "compute_expected_step",

@@ -19,7 +19,15 @@
       "Bash(.venv/bin/pip install:*)",
       "Bash(.venv/bin/python -m pytest -v 2>&1)",
       "Bash(.venv/bin/python benchmark_scoring.py 2>&1)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(.venv/bin/python -m pytest tests/test_ground_truth.py -v 2>&1)",
+      "Bash(.venv/bin/python -c \"import benchmark_scoring; print\\('benchmark_scoring OK'\\)\" 2>&1)",
+      "Bash(.venv/bin/python -c \"from ground_truth_editor import GridState; print\\('editor OK'\\)\" 2>&1)",
+      "Bash(.venv/bin/python -m pytest -v --tb=short 2>&1 | tail -20)",
+      "Bash(.venv/bin/python -c \"import benchmark_scoring; print\\('benchmark OK'\\)\" 2>&1)",
+      "Bash(.venv/bin/python -m pytest -v --tb=short 2>&1 | tail -15)"
     ]
   }
 }
