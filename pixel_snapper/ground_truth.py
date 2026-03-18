@@ -1,4 +1,4 @@
-"""Ground truth data model, JSON I/O, and accuracy metrics."""
+"""Ground truth data model, JSON I/O, accuracy metrics, and test image discovery."""
 from __future__ import annotations
 
 import json
@@ -150,3 +150,13 @@ def grid_accuracy(
         "col_error": col_err,
         "row_error": row_err,
     }
+
+
+def get_test_images(testdata_dir: Path) -> List[Path]:
+    """Get all input images from testdata directory."""
+    extensions = {'.png', '.jpg', '.jpeg', '.webp'}
+    images = []
+    for f in testdata_dir.iterdir():
+        if f.suffix.lower() in extensions and '_output' not in f.stem:
+            images.append(f)
+    return sorted(images)

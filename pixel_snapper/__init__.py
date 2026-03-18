@@ -34,9 +34,11 @@ import logging
 logger = logging.getLogger("pixel_snapper")
 logger.addHandler(logging.NullHandler())
 from .cli import (
-    ProcessingResult,
     main,
     process_image,
+)
+from .pipeline import (
+    ProcessingResult,
     process_image_bytes,
     process_image_bytes_with_grid,
 )
@@ -48,6 +50,7 @@ from .grid import (
 from .ground_truth import (
     GroundTruth,
     cut_position_error,
+    get_test_images,
     grid_accuracy,
     ground_truth_dir,
     load_ground_truth,
@@ -77,6 +80,7 @@ __all__ = [
     "detect_grid_hough",
     # Ground truth
     "GroundTruth",
+    "get_test_images",
     "load_ground_truth",
     "save_ground_truth",
     "ground_truth_dir",

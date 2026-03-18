@@ -38,37 +38,37 @@ pip install -r requirements-dev.txt
 
 ```bash
 # Basic usage
-python pixel_snapper.py input.png output.png
+python -m pixel_snapper input.png output.png
 
 # Specify number of colors (default: 16)
-python pixel_snapper.py input.png output.png 8
+python -m pixel_snapper input.png output.png 8
 
 # Use a bead palette
-python pixel_snapper.py input.png output.png --palette perler
+python -m pixel_snapper input.png output.png --palette perler
 
 # Use a bead palette and emit a printable pattern PDF
-python pixel_snapper.py input.png output.png --palette perler --pattern-format pdf
+python -m pixel_snapper input.png output.png --palette perler --pattern-format pdf
 
 # By default, pattern output is saved as output_pattern.pdf
 
 # Override bead pattern output path or format
-python pixel_snapper.py input.png output.png --palette perler --pattern-out pattern.pdf
+python -m pixel_snapper input.png output.png --palette perler --pattern-out pattern.pdf
 
 # Preview with grid visualization
-python pixel_snapper.py input.png output.png --preview
+python -m pixel_snapper input.png output.png --preview
 
 # Show timing information
-python pixel_snapper.py input.png output.png --timing
+python -m pixel_snapper input.png output.png --timing
 
 # Provide a resolution hint (max cells on long axis)
-python pixel_snapper.py input.png output.png --resolution-hint 128
+python -m pixel_snapper input.png output.png --resolution-hint 128
 
 # Enable debug logging
-python pixel_snapper.py input.png output.png --debug
+python -m pixel_snapper input.png output.png --debug
 
 # Photo -> Qwen cute pixel art -> Pixel Snapper
 # Requires DASHSCOPE_API_KEY in environment
-python pixel_snapper.py photo.jpg output.png --qwen
+python -m pixel_snapper photo.jpg output.png --qwen
 ```
 
 ### Options
@@ -148,12 +148,26 @@ print(f"Row boundaries: {result.row_cuts}")
 6. **Resampling**: Extracts one color per cell using majority vote
 
 Grid detection uses multiple candidate generators (autocorr, peak-based, Hough,
-fixed step sizes) and scores them for the best fit. See
-`benchmark_results.json` for the latest benchmark data.
+fixed step sizes) and scores them for the best fit.
 
-## Project Notes
+## Tools
 
-See `AGENTS.md` for a module map and contributor-focused notes.
+### Benchmark
+
+Run the scoring benchmark across all test images:
+
+```bash
+python tools/benchmark.py [--output results.json]
+```
+
+### Ground Truth Editor
+
+Tkinter GUI for creating and editing ground truth grid cuts:
+
+```bash
+python tools/ground_truth_editor.py testdata/ash.png
+python tools/ground_truth_editor.py testdata/ --missing-only
+```
 
 ## Running Tests
 

@@ -2,8 +2,7 @@
   "permissions": {
     "allow": [
       "Bash(python -m pytest:*)",
-      "Bash(python pixel_snapper.py:*)",
-      "Bash(python test_peaks.py:*)",
+      "Bash(python -m pixel_snapper:*)",
       "Bash(python:*)",
       "Bash(git checkout:*)",
       "Bash(tree:*)",
@@ -13,21 +12,22 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
+      "Bash(git mv:*)",
+      "Bash(git rm:*)",
       "Bash(wc:*)",
       "Bash(python3:*)",
-      "Bash(.venv/bin/python -m pytest tests/test_reconstruction.py -v 2>&1)",
+      "Bash(.venv/bin/python -m pytest:*)",
+      "Bash(.venv/bin/python tools/benchmark.py:*)",
+      "Bash(.venv/bin/python tools/ground_truth_editor.py:*)",
       "Bash(.venv/bin/pip install:*)",
-      "Bash(.venv/bin/python -m pytest -v 2>&1)",
-      "Bash(.venv/bin/python benchmark_scoring.py 2>&1)",
+      "Bash(.venv/bin/pip show:*)",
+      "Bash(.venv/bin/python -m pixel_snapper:*)",
+      "Bash(.venv/bin/python:*)",
       "Bash(grep:*)",
       "Bash(find:*)",
       "Bash(ls:*)",
-      "Bash(.venv/bin/python -m pytest tests/test_ground_truth.py -v 2>&1)",
-      "Bash(.venv/bin/python -c \"import benchmark_scoring; print\\('benchmark_scoring OK'\\)\" 2>&1)",
-      "Bash(.venv/bin/python -c \"from ground_truth_editor import GridState; print\\('editor OK'\\)\" 2>&1)",
-      "Bash(.venv/bin/python -m pytest -v --tb=short 2>&1 | tail -20)",
-      "Bash(.venv/bin/python -c \"import benchmark_scoring; print\\('benchmark OK'\\)\" 2>&1)",
-      "Bash(.venv/bin/python -m pytest -v --tb=short 2>&1 | tail -15)"
+      "Bash(head:*)",
+      "Bash(mkdir:*)"
     ]
   }
 }

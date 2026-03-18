@@ -2,9 +2,9 @@
 """Ground truth grid editor — Tkinter GUI for creating/editing ground truth cuts.
 
 Usage:
-    python ground_truth_editor.py testdata/ash.png
-    python ground_truth_editor.py testdata/ash.png --resolution-hint 64
-    python ground_truth_editor.py testdata/ --missing-only
+    python tools/ground_truth_editor.py testdata/ash.png
+    python tools/ground_truth_editor.py testdata/ash.png --resolution-hint 64
+    python tools/ground_truth_editor.py testdata/ --missing-only
 """
 from __future__ import annotations
 
@@ -16,16 +16,19 @@ from pathlib import Path
 from tkinter import messagebox, simpledialog
 from typing import List, Literal, Optional, Tuple
 
+# Ensure repo root is on sys.path when running as a script
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from PIL import Image, ImageTk
 
 from pixel_snapper import Config, process_image_bytes_with_grid
 from pixel_snapper.ground_truth import (
     GroundTruth,
+    get_test_images,
     ground_truth_dir,
     load_ground_truth,
     save_ground_truth,
 )
-from benchmark_scoring import get_test_images
 
 # ---------------------------------------------------------------------------
 # GridState — pure data model with undo/redo

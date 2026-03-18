@@ -6,12 +6,11 @@ about which detection methods perform best. Results are saved to a JSON file
 for comparison across code changes.
 
 Usage:
-    python benchmark_scoring.py [--output results.json]
+    python tools/benchmark.py [--output results.json]
 """
 from __future__ import annotations
 
 import json
-import io
 import sys
 import time
 from collections import defaultdict
@@ -20,10 +19,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from PIL import Image
+# Ensure repo root is on sys.path when running as a script
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pixel_snapper import Config, process_image_bytes_with_grid
-from pixel_snapper.ground_truth import grid_accuracy, ground_truth_dir, load_ground_truth
+from pixel_snapper.ground_truth import get_test_images, grid_accuracy, ground_truth_dir, load_ground_truth
 from pixel_snapper.scoring import ScoredCandidate
 
 
@@ -57,28 +57,17 @@ class BenchmarkResults:
     image_results: List[Dict[str, Any]]
 
 
-def get_test_images(testdata_dir: Path) -> List[Path]:
-    """Get all input images from testdata directory."""
-    extensions = {'.png', '.jpg', '.jpeg', '.webp'}
-    images = []
-    for f in testdata_dir.iterdir():
-        if f.suffix.lower() in extensions and '_output' not in f.stem:
-            images.append(f)
-    return sorted(images)
-
-
 def process_image(image_path: Path, config: Config) -> ImageResult:
     """Process a single image and collect scoring data."""
     with open(image_path, 'rb') as f:
         input_bytes = f.read()
 
-    # Get image dimensions from the already-read bytes
-    img = Image.open(io.BytesIO(input_bytes))
-    width, height = img.size
-
     start_time = time.perf_counter()
     result = process_image_bytes_with_grid(input_bytes, config)
     elapsed_ms = (time.perf_counter() - start_time) * 1000
+
+    # Get dimensions from the already-decoded quantized image
+    width, height = result.quantized_img.size
 
     # Extract candidate information
     candidates_data = []
@@ -266,8 +255,8 @@ def main() -> None:
             output_file = sys.argv[1]
 
     # Find testdata directory
-    script_dir = Path(__file__).parent
-    testdata_dir = script_dir / "testdata"
+    repo_root = Path(__file__).parent.parent
+    testdata_dir = repo_root / "testdata"
 
     if not testdata_dir.exists():
         print(f"Error: testdata directory not found at {testdata_dir}")
@@ -286,7 +275,7 @@ def main() -> None:
     print_summary(results)
 
     # Save to JSON
-    output_path = script_dir / output_file
+    output_path = repo_root / output_file
     with open(output_path, 'w') as f:
         json.dump(asdict(results), f, indent=2)
 
