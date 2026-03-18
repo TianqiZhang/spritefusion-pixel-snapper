@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from PIL import Image, ImageTk
 
 from pixel_snapper import Config, process_image_bytes_with_grid
+from pixel_snapper.resample import resample
 from pixel_snapper.ground_truth import (
     GroundTruth,
     get_test_images,
@@ -154,7 +155,6 @@ class GridState:
 # CanvasPanel — renders image + grid lines
 # ---------------------------------------------------------------------------
 
-_ZOOM_LEVELS = [1, 2, 4, 8, 16]
 _COL_COLOR = "#00e5ff"
 _ROW_COLOR = "#ff40ff"
 _HIGHLIGHT_COLOR = "#ffff00"
@@ -168,7 +168,8 @@ class CanvasPanel(tk.Canvas):
         super().__init__(master, bg="#222222", highlightthickness=0, **kw)
         self._src_image = image.convert("RGBA")
         self._state = state
-        self._zoom_index = 0
+        self._zoom: float = 1.0
+        self._manual_zoom: Optional[float] = None  # None = auto-fit
         self._photo: Optional[ImageTk.PhotoImage] = None
         self._pan_start: Optional[Tuple[int, int]] = None
 
@@ -176,6 +177,7 @@ class CanvasPanel(tk.Canvas):
         self._selected: Optional[Tuple[Literal["col", "row"], int]] = None
         self._dragging = False
         self._add_mode = False
+        self._add_axis: Optional[Literal["col", "row"]] = None
         self._subdivide_mode = False
 
         # Bindings
@@ -191,46 +193,55 @@ class CanvasPanel(tk.Canvas):
 
         # Mouse wheel zoom (macOS uses MouseWheel, Linux uses Button-4/5)
         self.bind("<MouseWheel>", self._on_mousewheel)
-        self.bind("<Button-4>", lambda e: self._zoom_in())
-        self.bind("<Button-5>", lambda e: self._zoom_out())
+        self.bind("<Button-4>", lambda e: self._zoom_manual(1.25))
+        self.bind("<Button-5>", lambda e: self._zoom_manual(1 / 1.25))
+
+        # Auto-fit on resize
+        self.bind("<Configure>", self._on_configure)
 
         self._render_image()
 
     # -- zoom ---------------------------------------------------------------
 
     @property
-    def zoom(self) -> int:
-        return _ZOOM_LEVELS[self._zoom_index]
+    def zoom(self) -> float:
+        return self._zoom
 
-    def _zoom_in(self) -> None:
-        if self._zoom_index < len(_ZOOM_LEVELS) - 1:
-            self._zoom_index += 1
-            self._render_image()
-            self._redraw_lines()
-
-    def _zoom_out(self) -> None:
-        if self._zoom_index > 0:
-            self._zoom_index -= 1
-            self._render_image()
-            self._redraw_lines()
-
-    def _on_mousewheel(self, event: tk.Event) -> None:
-        if event.delta > 0:
-            self._zoom_in()
-        elif event.delta < 0:
-            self._zoom_out()
-
-    def fit_to_window(self) -> None:
+    def _compute_fit_zoom(self) -> float:
         cw = self.winfo_width()
         ch = self.winfo_height()
         if cw < 10 or ch < 10:
-            return
+            return 1.0
         iw, ih = self._src_image.size
-        best = 0
-        for i, z in enumerate(_ZOOM_LEVELS):
-            if iw * z <= cw and ih * z <= ch:
-                best = i
-        self._zoom_index = best
+        return min(cw / iw, ch / ih)
+
+    def _zoom_manual(self, factor: float) -> None:
+        if self._manual_zoom is None:
+            self._manual_zoom = self._zoom
+        self._manual_zoom = max(0.25, min(self._manual_zoom * factor, 32.0))
+        self._zoom = self._manual_zoom
+        self._render_image()
+        self._redraw_lines()
+
+    def _on_mousewheel(self, event: tk.Event) -> None:
+        if event.delta > 0:
+            self._zoom_manual(1.25)
+        elif event.delta < 0:
+            self._zoom_manual(1 / 1.25)
+
+    def _on_configure(self, event: tk.Event) -> None:
+        if self._manual_zoom is not None:
+            return
+        z = self._compute_fit_zoom()
+        if abs(z - self._zoom) < 0.001:
+            return
+        self._zoom = z
+        self._render_image()
+        self._redraw_lines()
+
+    def fit_to_window(self) -> None:
+        self._manual_zoom = None
+        self._zoom = self._compute_fit_zoom()
         self._render_image()
         self._redraw_lines()
 
@@ -239,28 +250,27 @@ class CanvasPanel(tk.Canvas):
     def _render_image(self) -> None:
         z = self.zoom
         w, h = self._src_image.size
-        scaled = self._src_image.resize((w * z, h * z), Image.NEAREST)
+        sw, sh = max(1, int(w * z)), max(1, int(h * z))
+        scaled = self._src_image.resize((sw, sh), Image.NEAREST)
         self._photo = ImageTk.PhotoImage(scaled)
         self.delete("img")
         self.create_image(0, 0, anchor="nw", image=self._photo, tags="img")
-        self.config(scrollregion=(0, 0, w * z, h * z))
+        self.config(scrollregion=(0, 0, sw, sh))
 
     def _redraw_lines(self) -> None:
         self.delete("grid")
         z = self.zoom
-        h = self._state.image_height * z
-        w = self._state.image_width * z
+        h = int(self._state.image_height * z)
+        w = int(self._state.image_width * z)
 
         for i, cx in enumerate(self._state.col_cuts):
-            x = cx * z
+            x = int(cx * z)
             color = _HIGHLIGHT_COLOR if self._selected == ("col", i) else _COL_COLOR
-            self.create_line(x, 0, x, h, fill="black", width=3, tags="grid")
             self.create_line(x, 0, x, h, fill=color, width=1, tags="grid")
 
         for i, ry in enumerate(self._state.row_cuts):
-            y = ry * z
+            y = int(ry * z)
             color = _HIGHLIGHT_COLOR if self._selected == ("row", i) else _ROW_COLOR
-            self.create_line(0, y, w, y, fill="black", width=3, tags="grid")
             self.create_line(0, y, w, y, fill=color, width=1, tags="grid")
 
     def refresh(self) -> None:
@@ -270,16 +280,16 @@ class CanvasPanel(tk.Canvas):
 
     def _canvas_to_image(self, cx: int, cy: int) -> Tuple[int, int]:
         z = self.zoom
-        return int(self.canvasx(cx)) // z, int(self.canvasy(cy)) // z
+        return int(self.canvasx(cx) / z), int(self.canvasy(cy) / z)
 
     def _find_nearest_cut(self, cx: int, cy: int) -> Optional[Tuple[Literal["col", "row"], int]]:
         z = self.zoom
-        sx = int(self.canvasx(cx))
-        sy = int(self.canvasy(cy))
-        threshold = _SNAP_DIST * z
+        sx = self.canvasx(cx)
+        sy = self.canvasy(cy)
+        threshold = _SNAP_DIST * max(1.0, z)
 
         best: Optional[Tuple[Literal["col", "row"], int]] = None
-        best_dist = threshold + 1
+        best_dist = threshold + 1.0
 
         for i, c in enumerate(self._state.col_cuts):
             d = abs(sx - c * z)
@@ -324,6 +334,11 @@ class CanvasPanel(tk.Canvas):
         if app:
             app._update_status(ix, iy)
 
+    def _notify_preview(self) -> None:
+        app = self._app()
+        if app:
+            app._update_preview()
+
     def _on_left_down(self, event: tk.Event) -> None:
         if self._subdivide_mode:
             self._do_subdivide(event)
@@ -357,6 +372,8 @@ class CanvasPanel(tk.Canvas):
         self._notify_status(ix, iy)
 
     def _on_left_up(self, event: tk.Event) -> None:
+        if self._dragging:
+            self._notify_preview()
         self._dragging = False
 
     def _on_double_click(self, event: tk.Event) -> None:
@@ -372,6 +389,7 @@ class CanvasPanel(tk.Canvas):
             self._selected = None
             self._redraw_lines()
             self._notify_status(*self._canvas_to_image(event.x, event.y))
+            self._notify_preview()
 
     def _on_mid_down(self, event: tk.Event) -> None:
         self._pan_start = (event.x, event.y)
@@ -393,17 +411,24 @@ class CanvasPanel(tk.Canvas):
 
     def _do_add(self, event: tk.Event) -> None:
         ix, iy = self._canvas_to_image(event.x, event.y)
-        # Decide axis: which is farther from a cut
-        col_dists = [abs(ix - c) for c in self._state.col_cuts]
-        row_dists = [abs(iy - r) for r in self._state.row_cuts]
-        if min(col_dists) > min(row_dists):
+        if self._add_axis == "col":
             self._state.add_cut("col", ix)
-        else:
+        elif self._add_axis == "row":
             self._state.add_cut("row", iy)
+        else:
+            # Auto-detect: which is farther from a cut
+            col_dists = [abs(ix - c) for c in self._state.col_cuts]
+            row_dists = [abs(iy - r) for r in self._state.row_cuts]
+            if min(col_dists) > min(row_dists):
+                self._state.add_cut("col", ix)
+            else:
+                self._state.add_cut("row", iy)
         self._add_mode = False
+        self._add_axis = None
         self.config(cursor="")
         self._redraw_lines()
         self._notify_status(ix, iy)
+        self._notify_preview()
 
     def _do_subdivide(self, event: tk.Event) -> None:
         ix, iy = self._canvas_to_image(event.x, event.y)
@@ -422,6 +447,7 @@ class CanvasPanel(tk.Canvas):
         self.config(cursor="")
         self._redraw_lines()
         self._notify_status(ix, iy)
+        self._notify_preview()
 
 
 # ---------------------------------------------------------------------------
@@ -462,6 +488,26 @@ class GridEditorApp(tk.Tk):
         self.title(f"Ground Truth Editor — {image_path.name}")
         self.geometry("1200x800")
 
+        # Toolbar
+        toolbar = tk.Frame(self, bg="#333333", padx=4, pady=2)
+        btn_kw = dict(bg="#444444", fg="#cccccc", activebackground="#555555",
+                      activeforeground="#ffffff", relief="flat", padx=8, pady=2,
+                      font=("Courier", 11))
+
+        tk.Button(toolbar, text="Add Vertical", command=self._on_add_vertical, **btn_kw).pack(side="left", padx=2)
+        tk.Button(toolbar, text="Add Horizontal", command=self._on_add_horizontal, **btn_kw).pack(side="left", padx=2)
+        tk.Button(toolbar, text="Delete", command=self._on_delete_selected, **btn_kw).pack(side="left", padx=2)
+        tk.Button(toolbar, text="Subdivide", command=self._on_subdivide_mode, **btn_kw).pack(side="left", padx=2)
+        tk.Frame(toolbar, width=2, bg="#666666").pack(side="left", fill="y", padx=6, pady=2)
+        tk.Button(toolbar, text="Uniformize", command=self._on_uniformize, **btn_kw).pack(side="left", padx=2)
+        tk.Button(toolbar, text="Reset", command=self._on_reset, **btn_kw).pack(side="left", padx=2)
+        tk.Button(toolbar, text="Fit", command=self._on_fit, **btn_kw).pack(side="left", padx=2)
+        tk.Frame(toolbar, width=2, bg="#666666").pack(side="left", fill="y", padx=6, pady=2)
+        tk.Button(toolbar, text="Undo", command=self._on_undo, **btn_kw).pack(side="left", padx=2)
+        tk.Button(toolbar, text="Redo", command=self._on_redo, **btn_kw).pack(side="left", padx=2)
+        tk.Frame(toolbar, width=2, bg="#666666").pack(side="left", fill="y", padx=6, pady=2)
+        tk.Button(toolbar, text="Save", command=self._on_save, **btn_kw).pack(side="left", padx=2)
+
         # Layout
         self._canvas = CanvasPanel(self, self._image, self._state)
 
@@ -475,12 +521,25 @@ class GridEditorApp(tk.Tk):
             font=("Courier", 11), padx=6, pady=2,
         )
 
+        # Preview panel
+        preview_frame = tk.LabelFrame(
+            self, text="Preview", bg="#222222", fg="#cccccc",
+            font=("Courier", 11), padx=4, pady=4,
+        )
+        self._preview_canvas = tk.Canvas(
+            preview_frame, bg="#111111", highlightthickness=0, width=300,
+        )
+        self._preview_canvas.pack(fill="both", expand=True)
+        self._preview_photo: Optional[ImageTk.PhotoImage] = None
+
         # Grid layout
-        self._canvas.grid(row=0, column=0, sticky="nsew")
-        yscroll.grid(row=0, column=1, sticky="ns")
-        xscroll.grid(row=1, column=0, sticky="ew")
-        self._status.grid(row=2, column=0, columnspan=2, sticky="ew")
-        self.grid_rowconfigure(0, weight=1)
+        toolbar.grid(row=0, column=0, columnspan=3, sticky="ew")
+        self._canvas.grid(row=1, column=0, sticky="nsew")
+        yscroll.grid(row=1, column=1, sticky="ns")
+        preview_frame.grid(row=1, column=2, rowspan=2, sticky="nsew", padx=(4, 0))
+        xscroll.grid(row=2, column=0, sticky="ew")
+        self._status.grid(row=3, column=0, columnspan=3, sticky="ew")
+        self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         # Key bindings
@@ -492,7 +551,8 @@ class GridEditorApp(tk.Tk):
         self.bind("<Command-Shift-Z>", self._on_redo)
         self.bind("<Control-s>", self._on_save)
         self.bind("<Command-s>", self._on_save)
-        self.bind("<Key-a>", self._on_add_mode)
+        self.bind("<Key-a>", self._on_add_vertical)
+        self.bind("<Key-h>", self._on_add_horizontal)
         self.bind("<Key-d>", self._on_delete_selected)
         self.bind("<Delete>", self._on_delete_selected)
         self.bind("<BackSpace>", self._on_delete_selected)
@@ -507,6 +567,7 @@ class GridEditorApp(tk.Tk):
 
         self._canvas._redraw_lines()
         self._update_status(0, 0)
+        self._update_preview()
 
     # -- status bar ---------------------------------------------------------
 
@@ -521,7 +582,35 @@ class GridEditorApp(tk.Tk):
         zoom = self._canvas.zoom
         self._status.config(
             text=f"{cx}\u00d7{cy} cells | step ~{avg:.1f} px | "
-                 f"({ix}, {iy}) | zoom {zoom}x{dirty}"
+                 f"({ix}, {iy}) | zoom {zoom:.1f}x{dirty}"
+        )
+
+    # -- preview panel ------------------------------------------------------
+
+    def _update_preview(self) -> None:
+        s = self._state
+        if len(s.col_cuts) < 2 or len(s.row_cuts) < 2:
+            return
+        try:
+            small = resample(self._image, s.col_cuts, s.row_cuts)
+        except Exception:
+            return
+        # Scale up with nearest-neighbor to fit the preview canvas
+        self._preview_canvas.update_idletasks()
+        pw = self._preview_canvas.winfo_width()
+        ph = self._preview_canvas.winfo_height()
+        if pw < 10 or ph < 10:
+            pw, ph = 300, 600
+        sw, sh = small.size
+        if sw == 0 or sh == 0:
+            return
+        scale = min(pw / sw, ph / sh)
+        scale = max(1, int(scale))
+        scaled = small.resize((sw * scale, sh * scale), Image.NEAREST)
+        self._preview_photo = ImageTk.PhotoImage(scaled)
+        self._preview_canvas.delete("all")
+        self._preview_canvas.create_image(
+            pw // 2, ph // 2, anchor="center", image=self._preview_photo,
         )
 
     # -- keyboard handlers --------------------------------------------------
@@ -530,11 +619,13 @@ class GridEditorApp(tk.Tk):
         self._state.undo()
         self._canvas.refresh()
         self._update_status()
+        self._update_preview()
 
     def _on_redo(self, event: tk.Event = None) -> None:
         self._state.redo()
         self._canvas.refresh()
         self._update_status()
+        self._update_preview()
 
     def _on_save(self, event: tk.Event = None) -> None:
         gt = GroundTruth(
@@ -562,11 +653,19 @@ class GridEditorApp(tk.Tk):
         self._update_status()
         self._status.config(text=self._status.cget("text") + f" | Saved to {self._save_path.name}")
 
-    def _on_add_mode(self, event: tk.Event = None) -> None:
+    def _on_add_vertical(self, event: tk.Event = None) -> None:
         self._canvas._add_mode = True
+        self._canvas._add_axis = "col"
         self._canvas._subdivide_mode = False
         self._canvas.config(cursor="crosshair")
-        self._status.config(text="ADD MODE: Click to add a cut (col or row auto-detected)")
+        self._status.config(text="ADD MODE: Click to add a vertical (column) cut")
+
+    def _on_add_horizontal(self, event: tk.Event = None) -> None:
+        self._canvas._add_mode = True
+        self._canvas._add_axis = "row"
+        self._canvas._subdivide_mode = False
+        self._canvas.config(cursor="crosshair")
+        self._status.config(text="ADD MODE: Click to add a horizontal (row) cut")
 
     def _on_delete_selected(self, event: tk.Event = None) -> None:
         if self._canvas._selected:
@@ -575,6 +674,7 @@ class GridEditorApp(tk.Tk):
             self._canvas._selected = None
             self._canvas.refresh()
             self._update_status()
+            self._update_preview()
 
     def _on_subdivide_mode(self, event: tk.Event = None) -> None:
         self._canvas._subdivide_mode = True
@@ -592,6 +692,7 @@ class GridEditorApp(tk.Tk):
             self._state.uniformize("row", step)
             self._canvas.refresh()
             self._update_status()
+            self._update_preview()
 
     def _on_reset(self, event: tk.Event = None) -> None:
         if messagebox.askyesno("Reset", "Revert to algorithm's original prediction?"):
@@ -601,6 +702,7 @@ class GridEditorApp(tk.Tk):
             )
             self._canvas.refresh()
             self._update_status()
+            self._update_preview()
 
     def _on_fit(self, event: tk.Event = None) -> None:
         self._canvas.fit_to_window()
@@ -618,6 +720,7 @@ class GridEditorApp(tk.Tk):
             self._state.move_cut(axis, idx, cuts[idx] + delta * step)
             self._canvas.refresh()
             self._update_status()
+            self._update_preview()
 
 
 # ---------------------------------------------------------------------------

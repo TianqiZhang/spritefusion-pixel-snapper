@@ -1,33 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m pytest:*)",
-      "Bash(python -m pixel_snapper:*)",
       "Bash(python:*)",
-      "Bash(git checkout:*)",
-      "Bash(tree:*)",
-      "Bash(git fetch:*)",
-      "Bash(git show:*)",
-      "Bash(git merge:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(git mv:*)",
-      "Bash(git rm:*)",
-      "Bash(wc:*)",
       "Bash(python3:*)",
-      "Bash(.venv/bin/python -m pytest:*)",
-      "Bash(.venv/bin/python tools/benchmark.py:*)",
-      "Bash(.venv/bin/python tools/ground_truth_editor.py:*)",
-      "Bash(.venv/bin/pip install:*)",
-      "Bash(.venv/bin/pip show:*)",
-      "Bash(.venv/bin/python -m pixel_snapper:*)",
+      "Bash(git:*)",
+      "Bash(tree:*)",
+      "Bash(wc:*)",
       "Bash(.venv/bin/python:*)",
+      "Bash(.venv/bin/pip:*)",
       "Bash(grep:*)",
       "Bash(find:*)",
       "Bash(ls:*)",
       "Bash(head:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(brew install:*)",
+      "Bash(rm:*)"
     ]
   }
 }
