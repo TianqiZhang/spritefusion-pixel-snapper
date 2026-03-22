@@ -12,9 +12,10 @@ from PIL import Image, ImageDraw, ImageFont
 logger = logging.getLogger("pixel_snapper")
 
 from .config import Config, PixelSnapperError
+from .palette import load_palette
 from .pattern import render_bead_pattern
 from .pipeline import ProcessingResult, process_image_bytes, process_image_bytes_with_grid
-from .resample import resample
+from .resample import resample, resample_center, resample_mean, resample_palette_aware
 from .scoring import ScoredCandidate
 
 
@@ -64,6 +65,7 @@ def process_image(config: Config) -> None:
                 result.col_cuts,
                 result.row_cuts,
                 result.quantized_img,
+                config,
             )
         else:
             # Fall back to simple side-by-side preview
@@ -218,6 +220,30 @@ def draw_output_grid(
     return result
 
 
+def _resample_with_config(
+    img: Image.Image,
+    col_cuts: List[int],
+    row_cuts: List[int],
+    config: Config,
+) -> Image.Image:
+    """Resample using the same strategy the pipeline would use."""
+    import numpy as np
+
+    method = config.resample_method
+    if method == "auto":
+        method = "palette_aware" if config.palette else "majority"
+
+    if method == "palette_aware" and config.palette:
+        palette = load_palette(config.palette)
+        palette_rgb = np.array(palette.rgb, dtype=np.float64)
+        palette_lab = np.array(palette.lab, dtype=np.float64)
+        return resample_palette_aware(img, col_cuts, row_cuts, palette_rgb, palette_lab)
+
+    funcs = {"majority": resample, "center": resample_center, "mean": resample_mean}
+    fn = funcs.get(method, resample)
+    return fn(img, col_cuts, row_cuts)
+
+
 def preview_candidates(
     input_bytes: bytes,
     output_bytes: bytes,
@@ -225,6 +251,7 @@ def preview_candidates(
     winner_col_cuts: List[int],
     winner_row_cuts: List[int],
     quantized_img: Image.Image,
+    config: Config,
     scale: int = 4,
     max_candidates: int = 5,
 ) -> None:
@@ -315,8 +342,10 @@ def preview_candidates(
         )
         preview.paste(img_with_grid, (col_x, 0))
 
-        # Row 2: Resampled output
-        candidate_output = resample(quantized_img, candidate.col_cuts, candidate.row_cuts)
+        # Row 2: Resampled output (use same strategy as pipeline)
+        candidate_output = _resample_with_config(
+            quantized_img, candidate.col_cuts, candidate.row_cuts, config
+        )
         scaled_candidate_output = candidate_output.resize(
             (scaled_w, scaled_h), resample=Image.NEAREST
         )
@@ -427,6 +456,17 @@ def parse_args(argv: Sequence[str]) -> Config:
                 )
             config.resolution_hint = resolution_hint
             i += 2
+        elif arg == "--resample":
+            if i + 1 >= len(args):
+                raise PixelSnapperError(_usage_message())
+            method = args[i + 1].lower()
+            if method not in ("auto", "majority", "center", "mean", "palette_aware"):
+                raise PixelSnapperError(
+                    f"Invalid resample method '{method}'. "
+                    "Use auto, majority, center, mean, or palette_aware."
+                )
+            config.resample_method = method
+            i += 2
         elif arg == "--qwen":
             config.qwen_enabled = True
             i += 1
@@ -484,8 +524,8 @@ def _usage_message() -> str:
     return (
         "Usage: python -m pixel_snapper input.png output.png [k_colors] "
         "[--palette NAME] [--pattern-out PATH] [--pattern-format pdf|png] "
-        "[--palette-space rgb|lab] [--resolution-hint N] [--preview] "
-        "[--timing] [--debug] [--qwen]"
+        "[--palette-space rgb|lab] [--resolution-hint N] [--resample auto|majority|center|mean|palette_aware] "
+        "[--preview] [--timing] [--debug] [--qwen]"
     )
 
 

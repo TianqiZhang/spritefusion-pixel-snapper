@@ -14,7 +14,11 @@ python -m pytest tests/ -v
 ## Running the CLI
 
 ```bash
-python -m pixel_snapper input.png output.png [k_colors] [--preview] [--debug] [--timing]
+python -m pixel_snapper input.png output.png [k_colors] \
+  [--palette NAME] [--resample auto|majority|center|mean|palette_aware] \
+  [--pattern-out PATH] [--pattern-format pdf|png] \
+  [--palette-space rgb|lab] [--resolution-hint N] \
+  [--preview] [--debug] [--timing] [--qwen]
 ```
 
 ## Module map
@@ -33,10 +37,10 @@ python -m pixel_snapper input.png output.png [k_colors] [--preview] [--debug] [-
 | `candidates.py` | Candidate generation, deduplication, filtering |
 | `profile.py` | Gradient profile computation for edge detection |
 | `quantize.py` | K-means++ color quantization or palette matching |
-| `resample.py` | Grid cell resampling via majority vote |
+| `resample.py` | Grid cell resampling (majority, mean, center, palette_aware) + fidelity metric |
 | `reconstruction.py` | Reconstruction-based grid detection |
 | `hough.py` | OpenCV Hough-based grid detection (optional, needs opencv-python) |
-| `palette.py` | CSV palette loading and resolution |
+| `palette.py` | CSV palette loading and resolution (lru_cached) |
 | `pattern.py` | Bead pattern rendering (PDF/PNG) |
 | `color.py` | RGB ↔ LAB color conversion |
 | `ground_truth.py` | Ground truth data model, JSON I/O, accuracy metrics, `get_test_images()` |
@@ -48,6 +52,7 @@ python -m pixel_snapper input.png output.png [k_colors] [--preview] [--debug] [-
 |--------|---------|
 | `benchmark.py` | Benchmark grid detection across testdata images |
 | `ground_truth_editor.py` | Tkinter GUI for creating/editing ground truth cuts |
+| `gt_eval.py` | Evaluate pipeline against ground truth (`--verbose`, `--sweep`, `--palette NAME`) |
 
 ### Tests (`tests/`)
 
@@ -71,6 +76,20 @@ Config in `pytest.ini`.
 7. Score candidates (uniformity + edge alignment + size penalty)
 8. Stabilize winning grid
 9. Resample to final output
+
+## Resampling
+
+`--resample` controls the per-cell color selection strategy. Default is `auto`.
+
+| Method | Behavior |
+|--------|----------|
+| `auto` | `palette_aware` when `--palette` is set, `majority` otherwise |
+| `majority` | Most common color per cell |
+| `mean` | Alpha-weighted mean RGB (may produce non-palette colors) |
+| `center` | Center pixel, falls back to majority if transparent |
+| `palette_aware` | Mean RGB → snap to nearest palette color in LAB. Requires `--palette` |
+
+Fidelity is measured via `compute_fidelity()` in `resample.py`: Lanczos downscale as reference, Delta-E (CIE76) in LAB space. Accepts optional palette arrays to measure end-to-end quality after palette mapping.
 
 ## Key conventions
 

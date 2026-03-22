@@ -169,8 +169,7 @@ def score_grid_uniformity(
 
     arr = np.array(img, dtype=np.float64)
     total_variance = 0.0
-    cell_count = 0
-    total_weight = 0.0
+    opaque_cell_count = 0
 
     for i in range(len(col_cuts) - 1):
         for j in range(len(row_cuts) - 1):
@@ -189,8 +188,7 @@ def score_grid_uniformity(
             opaque_mask = alpha > 0
 
             if not np.any(opaque_mask):
-                # Fully transparent cell - no variance contribution
-                cell_count += 1
+                # Fully transparent cell - skip
                 continue
 
             # Compute variance for RGB channels on opaque pixels
@@ -203,18 +201,14 @@ def score_grid_uniformity(
             else:
                 variance = 0.0
 
-            # Weight by cell size (larger cells matter more)
-            cell_size = (x1 - x0) * (y1 - y0)
-            weight = float(cell_size)
+            # Equal weight per cell — avoids bias toward coarser grids
+            total_variance += variance
+            opaque_cell_count += 1
 
-            total_variance += variance * weight
-            total_weight += weight
-            cell_count += 1
-
-    if total_weight == 0:
+    if opaque_cell_count == 0:
         return float("inf")
 
-    return total_variance / total_weight
+    return total_variance / opaque_cell_count
 
 
 def score_edge_alignment(
@@ -259,7 +253,7 @@ def score_all_candidates(
     width: int,
     height: int,
     uniformity_weight: float = 1.0,
-    edge_weight: float = 0.5,
+    edge_weight: float = 0.0,
     expected_step: Optional[float] = None,
     size_penalty_tolerance: float = 0.25,
     size_penalty_weight: float = 0.3,

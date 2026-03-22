@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
+import numpy as np
 from PIL import Image
 
 logger = logging.getLogger("pixel_snapper")
@@ -29,7 +30,8 @@ from .grid import (
 )
 from .profile import compute_profiles
 from .quantize import quantize_image
-from .resample import resample
+from .palette import load_palette
+from .resample import resample, resample_center, resample_mean, resample_palette_aware
 from .scoring import ScoredCandidate, compute_expected_step, score_all_candidates
 from .qwen import maybe_apply_qwen_edit
 
@@ -261,7 +263,33 @@ def process_image_bytes_with_grid(
     )
     t6 = time.perf_counter()
 
-    output_img = resample(quantized, col_cuts, row_cuts)
+    # Select resampling strategy
+    # "auto" (default) picks palette_aware when a palette is loaded, else majority.
+    # Explicit methods are always respected.
+    VALID_RESAMPLE_METHODS = {"auto", "majority", "center", "mean", "palette_aware"}
+    method = config.resample_method
+    if method not in VALID_RESAMPLE_METHODS:
+        raise PixelSnapperError(
+            f"Invalid resample method '{method}'. "
+            f"Use one of: {', '.join(sorted(VALID_RESAMPLE_METHODS))}"
+        )
+
+    if method == "auto":
+        method = "palette_aware" if config.palette else "majority"
+
+    if method == "palette_aware":
+        if not config.palette:
+            raise PixelSnapperError("palette_aware resampling requires --palette")
+        palette = load_palette(config.palette)
+        palette_rgb = np.array(palette.rgb, dtype=np.float64)
+        palette_lab = np.array(palette.lab, dtype=np.float64)
+        output_img = resample_palette_aware(
+            quantized, col_cuts, row_cuts, palette_rgb, palette_lab
+        )
+    else:
+        resample_funcs = {"majority": resample, "center": resample_center, "mean": resample_mean}
+        resample_fn = resample_funcs[method]
+        output_img = resample_fn(quantized, col_cuts, row_cuts)
     t7 = time.perf_counter()
 
     out_buf = io.BytesIO()

@@ -55,6 +55,9 @@ class Config:
     # Resolution hint (upper limit on cells)
     resolution_hint: Optional[int] = None  # Max cells on long axis
 
+    # Resampling strategy
+    resample_method: str = "auto"  # "auto", "majority", "center", "mean", "palette_aware"
+
     # Reconstruction-based grid detection
     use_reconstruction: bool = True
     reconstruction_min_step: int = 3

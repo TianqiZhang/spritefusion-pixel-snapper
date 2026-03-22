@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import functools
 import os
 from dataclasses import dataclass
 from typing import List, Tuple
@@ -131,6 +132,7 @@ def load_palette_entries(palette_name: str) -> List[PaletteEntry]:
     return entries
 
 
+@functools.lru_cache(maxsize=8)
 def load_palette(palette_name: str) -> Palette:
     """Load a palette from a CSV file.
 
