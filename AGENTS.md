@@ -1,4 +1,4 @@
-# CLAUDE.md — Pixel Snapper
+# AGENTS.md — Pixel Snapper
 
 ## What this project does
 
@@ -38,7 +38,6 @@ python -m pixel_snapper input.png output.png [k_colors] \
 | `profile.py` | Gradient profile computation for edge detection |
 | `quantize.py` | K-means++ color quantization or palette matching |
 | `resample.py` | Grid cell resampling (majority, mean, center, palette_aware) + fidelity metric |
-| `reconstruction.py` | Reconstruction-based grid detection |
 | `hough.py` | OpenCV Hough-based grid detection (optional, needs opencv-python) |
 | `palette.py` | CSV palette loading and resolution (lru_cached) |
 | `pattern.py` | Bead pattern rendering (PDF/PNG) |
@@ -72,7 +71,7 @@ Config in `pytest.ini`.
 3. Quantize colors (K-means++ or palette matching)
 4. Compute gradient profiles (edge detection)
 5. Estimate step sizes (autocorrelation + peak-based)
-6. Generate candidate grids (autocorr, peaks, Hough, reconstruction, fixed steps)
+6. Generate candidate grids (autocorr, peaks, Hough, fixed steps)
 7. Score candidates (uniformity + edge alignment + size penalty)
 8. Stabilize winning grid
 9. Resample to final output

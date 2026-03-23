@@ -209,7 +209,6 @@ def process_image_bytes_with_grid(
             step_x_peaks=step_x_peaks,
             step_y_peaks=step_y_peaks,
             detect_grid_cuts=_detect_grid_cuts,
-            original_img=img,
         )
 
         # Deduplicate and filter candidates

@@ -350,7 +350,6 @@ def run_weight_sweep(
     config = Config(
         use_uniformity_scoring=True,
         use_autocorrelation=True,
-        use_reconstruction=True,
     )
 
     # Step 1: Run pipeline once per image, cache intermediate data
@@ -498,7 +497,6 @@ def main() -> None:
     config = Config(
         use_uniformity_scoring=True,
         use_autocorrelation=True,
-        use_reconstruction=True,
     )
 
     results = []
