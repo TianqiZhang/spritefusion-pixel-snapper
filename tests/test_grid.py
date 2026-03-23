@@ -11,6 +11,7 @@ from pixel_snapper.grid import (
     snap_uniform_cuts,
     stabilize_both_axes,
     stabilize_cuts,
+    trim_margin_cuts,
     walk_with_offset,
 )
 
@@ -232,3 +233,43 @@ class TestStabilizeBothAxes:
         row_step = 100 / (len(result_rows) - 1)
         ratio = max(col_step, row_step) / min(col_step, row_step)
         assert ratio <= config.max_step_ratio + 0.5
+
+
+class TestTrimMarginCuts:
+    """Tests for trim_margin_cuts function."""
+
+    def test_no_trim_needed(self) -> None:
+        """Should not change cuts when all cells are similar size."""
+        cuts = [0, 35, 70, 105, 140]
+        assert trim_margin_cuts(cuts) == cuts
+
+    def test_trim_leading_margin(self) -> None:
+        """Should remove thin leading cell."""
+        cuts = [0, 7, 42, 78, 114, 149]
+        result = trim_margin_cuts(cuts)
+        assert result == [0, 42, 78, 114, 149]
+
+    def test_trim_trailing_margin(self) -> None:
+        """Should remove thin trailing cell."""
+        cuts = [0, 35, 70, 105, 140, 143]
+        result = trim_margin_cuts(cuts)
+        # Removes cut at 140, merging the 3px cell into the previous one
+        assert result == [0, 35, 70, 105, 143]
+
+    def test_trim_both_margins(self) -> None:
+        """Should remove thin cells at both ends."""
+        cuts = [0, 5, 40, 75, 110, 145, 148]
+        result = trim_margin_cuts(cuts)
+        assert result == [0, 40, 75, 110, 148]
+
+    def test_too_few_cuts(self) -> None:
+        """Should not trim when fewer than 4 cuts."""
+        assert trim_margin_cuts([0, 5, 100]) == [0, 5, 100]
+        assert trim_margin_cuts([0, 100]) == [0, 100]
+
+    def test_preserves_boundaries(self) -> None:
+        """Should always keep first and last cut."""
+        cuts = [0, 3, 38, 73, 108, 1024]
+        result = trim_margin_cuts(cuts)
+        assert result[0] == 0
+        assert result[-1] == 1024

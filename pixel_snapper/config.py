@@ -40,7 +40,6 @@ class Config:
     preview: bool = False
     timing: bool = False
     palette: Optional[str] = None
-    palette_space: str = "lab"
     pattern_output: Optional[str] = None
     pattern_format: str = "pdf"
 

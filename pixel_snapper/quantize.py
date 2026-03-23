@@ -1,4 +1,9 @@
-"""Image quantization using K-means clustering or palette matching."""
+"""Image quantization using K-means clustering.
+
+Palette-based quantization was removed after experiments showed K-means to 16
+colors produces the best grid detection accuracy.  Palette matching is now
+handled only at the resampling stage (resample_palette_aware).
+"""
 from __future__ import annotations
 
 import random
@@ -6,9 +11,7 @@ import random
 import numpy as np
 from PIL import Image
 
-from .color import rgb_to_lab
 from .config import Config, PixelSnapperError
-from .palette import Palette, load_palette
 
 
 def _find_nearest_chunked(
@@ -40,7 +43,10 @@ def _find_nearest_chunked(
 
 
 def quantize_image(img: Image.Image, config: Config) -> Image.Image:
-    """Quantize an image to reduce colors.
+    """Quantize an image using K-means to reduce colors for grid detection.
+
+    Always uses K-means regardless of whether a palette is configured,
+    since experiments showed K-means-16 gives the best detection accuracy.
 
     Args:
         img: Input RGBA image.
@@ -54,10 +60,6 @@ def quantize_image(img: Image.Image, config: Config) -> Image.Image:
     """
     if config.k_colors <= 0:
         raise PixelSnapperError("Number of colors must be greater than 0")
-
-    if config.palette:
-        palette = load_palette(config.palette)
-        return palette_quantize(img, palette, config.palette_space)
 
     return kmeans_quantize(img, config)
 
@@ -223,45 +225,5 @@ def _apply_centroids(
     new_rgb = np.rint(centroids[nearest]).clip(0, 255).astype(np.uint8)
     flat_out = flat.copy()
     flat_out[flat_mask, :3] = new_rgb
-    out_arr = flat_out.reshape(arr.shape)
-    return Image.fromarray(out_arr, "RGBA")
-
-
-def palette_quantize(
-    img: Image.Image, palette: Palette, space: str
-) -> Image.Image:
-    """Quantize image using a fixed color palette.
-
-    Args:
-        img: Input RGBA image.
-        palette: Color palette to match against.
-        space: Color space for matching ("rgb" or "lab").
-
-    Returns:
-        Quantized RGBA image.
-    """
-    arr = np.array(img, dtype=np.uint8)
-    flat = arr.reshape(-1, 4)
-    mask = flat[:, 3] != 0
-    rgb = flat[mask, :3].astype(np.float64)
-
-    if rgb.size == 0:
-        return img.copy()
-
-    palette_rgb = np.array(palette.rgb, dtype=np.float64)
-    palette_lab = np.array(palette.lab, dtype=np.float64)
-
-    if space == "lab":
-        data = rgb_to_lab(rgb)
-        target_palette = palette_lab
-    else:
-        data = rgb
-        target_palette = palette_rgb
-
-    nearest = _find_nearest_chunked(data, target_palette)
-
-    mapped = np.rint(palette_rgb[nearest]).clip(0, 255).astype(np.uint8)
-    flat_out = flat.copy()
-    flat_out[mask, :3] = mapped
     out_arr = flat_out.reshape(arr.shape)
     return Image.fromarray(out_arr, "RGBA")

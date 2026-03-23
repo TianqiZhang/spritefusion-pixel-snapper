@@ -6,10 +6,8 @@ import pytest
 from PIL import Image
 
 from pixel_snapper.config import Config, PixelSnapperError
-from pixel_snapper.palette import Palette
 from pixel_snapper.quantize import (
     kmeans_quantize,
-    palette_quantize,
     quantize_image,
 )
 
@@ -97,53 +95,3 @@ class TestKmeansQuantize:
         config = Config(k_colors=4, max_kmeans_iterations=100)
         result = kmeans_quantize(sample_image, config)
         assert result is not None
-
-
-class TestPaletteQuantize:
-    """Tests for palette_quantize function."""
-
-    def test_maps_to_palette_colors(self) -> None:
-        """Should map all colors to palette colors."""
-        img = Image.new("RGBA", (10, 10), (100, 100, 100, 255))
-        palette = Palette(
-            rgb=[(255, 0, 0), (0, 255, 0), (0, 0, 255)],
-            lab=[(53.23, 80.11, 67.22), (87.74, -86.18, 83.18), (32.30, 79.20, -107.86)],
-        )
-        result = palette_quantize(img, palette, "rgb")
-
-        arr = np.array(result)
-        unique_colors = set()
-        for y in range(arr.shape[0]):
-            for x in range(arr.shape[1]):
-                color = tuple(arr[y, x, :3])
-                unique_colors.add(color)
-
-        # All colors should be from palette
-        for color in unique_colors:
-            assert color in [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
-
-    def test_rgb_space(self) -> None:
-        """Should use RGB space when specified."""
-        img = Image.new("RGBA", (10, 10), (254, 0, 0, 255))  # Almost red
-        palette = Palette(
-            rgb=[(255, 0, 0), (0, 0, 0)],
-            lab=[(53.23, 80.11, 67.22), (0, 0, 0)],
-        )
-        result = palette_quantize(img, palette, "rgb")
-
-        arr = np.array(result)
-        # Should map to red (closest in RGB)
-        assert tuple(arr[0, 0, :3]) == (255, 0, 0)
-
-    def test_lab_space(self) -> None:
-        """Should use LAB space when specified."""
-        img = Image.new("RGBA", (10, 10), (128, 128, 128, 255))
-        palette = Palette(
-            rgb=[(255, 255, 255), (0, 0, 0)],
-            lab=[(100, 0, 0), (0, 0, 0)],
-        )
-        result = palette_quantize(img, palette, "lab")
-        # Result should be either black or white
-        arr = np.array(result)
-        color = tuple(arr[0, 0, :3])
-        assert color in [(255, 255, 255), (0, 0, 0)]

@@ -436,11 +436,6 @@ def parse_args(argv: Sequence[str]) -> Config:
                 raise PixelSnapperError(_usage_message())
             config.pattern_format = args[i + 1].lower()
             i += 2
-        elif arg == "--palette-space":
-            if i + 1 >= len(args):
-                raise PixelSnapperError(_usage_message())
-            config.palette_space = args[i + 1].lower()
-            i += 2
         elif arg == "--resolution-hint":
             if i + 1 >= len(args):
                 raise PixelSnapperError(_usage_message())
@@ -478,8 +473,6 @@ def parse_args(argv: Sequence[str]) -> Config:
             positional.append(arg)
             i += 1
 
-    if config.palette_space not in ("rgb", "lab"):
-        raise PixelSnapperError("palette-space must be 'rgb' or 'lab'")
     if config.pattern_format not in ("pdf", "png"):
         raise PixelSnapperError("pattern-format must be 'pdf' or 'png'")
 
@@ -524,7 +517,7 @@ def _usage_message() -> str:
     return (
         "Usage: python -m pixel_snapper input.png output.png [k_colors] "
         "[--palette NAME] [--pattern-out PATH] [--pattern-format pdf|png] "
-        "[--palette-space rgb|lab] [--resolution-hint N] [--resample auto|majority|center|mean|palette_aware] "
+        "[--resolution-hint N] [--resample auto|majority|center|mean|palette_aware] "
         "[--preview] [--timing] [--debug] [--qwen]"
     )
 

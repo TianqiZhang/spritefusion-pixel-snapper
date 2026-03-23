@@ -50,32 +50,6 @@ class TestParseArgs:
         config = parse_args(["prog", "in.png", "out.png", "--palette", "perler"])
         assert config.palette == "perler"
 
-    def test_palette_space_rgb(self) -> None:
-        """Should parse --palette-space rgb."""
-        config = parse_args([
-            "prog", "in.png", "out.png",
-            "--palette", "perler",
-            "--palette-space", "rgb"
-        ])
-        assert config.palette_space == "rgb"
-
-    def test_palette_space_lab(self) -> None:
-        """Should parse --palette-space lab."""
-        config = parse_args([
-            "prog", "in.png", "out.png",
-            "--palette", "perler",
-            "--palette-space", "lab"
-        ])
-        assert config.palette_space == "lab"
-
-    def test_invalid_palette_space(self) -> None:
-        """Should reject invalid palette-space."""
-        with pytest.raises(PixelSnapperError, match="must be 'rgb' or 'lab'"):
-            parse_args([
-                "prog", "in.png", "out.png",
-                "--palette-space", "xyz"
-            ])
-
     def test_missing_input(self) -> None:
         """Should require input path."""
         with pytest.raises(PixelSnapperError, match="Usage"):
@@ -96,18 +70,12 @@ class TestParseArgs:
         with pytest.raises(PixelSnapperError, match="Usage"):
             parse_args(["prog", "in.png", "out.png", "--palette"])
 
-    def test_missing_palette_space_value(self) -> None:
-        """Should require value after --palette-space."""
-        with pytest.raises(PixelSnapperError, match="Usage"):
-            parse_args(["prog", "in.png", "out.png", "--palette-space"])
-
     def test_combined_flags(self) -> None:
         """Should parse multiple flags together."""
         config = parse_args([
             "prog", "in.png", "out.png", "24",
             "--preview", "--timing",
             "--palette", "hama",
-            "--palette-space", "lab"
         ])
         assert config.input_path == "in.png"
         assert config.output_path == "out.png"
@@ -115,7 +83,6 @@ class TestParseArgs:
         assert config.preview is True
         assert config.timing is True
         assert config.palette == "hama"
-        assert config.palette_space == "lab"
 
     def test_qwen_flag(self) -> None:
         """Should enable Qwen pre-processing."""

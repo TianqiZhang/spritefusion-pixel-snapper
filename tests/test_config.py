@@ -17,7 +17,6 @@ class TestConfig:
         assert config.max_kmeans_iterations == 15
         assert config.peak_threshold_multiplier == 0.2
         assert config.palette is None
-        assert config.palette_space == "lab"
 
     def test_custom_values(self) -> None:
         """Config should accept custom values."""

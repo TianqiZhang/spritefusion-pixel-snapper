@@ -518,6 +518,55 @@ def stabilize_cuts(
     return snap_uniform_cuts(profile, limit, target_step, config, min_required)
 
 
+def trim_margin_cuts(cuts: List[int], min_cell_fraction: float = 0.4) -> List[int]:
+    """Remove cuts that create undersized border cells (margin artifacts).
+
+    When the elastic walker starts at offset 0 and ends at the image edge,
+    it can create tiny cells at the borders that are just background margin.
+    This function merges those thin border cells into their neighbor.
+
+    Args:
+        cuts: Sorted list of cut positions (must include 0 and limit).
+        min_cell_fraction: Minimum cell size as fraction of median.
+            Cells smaller than this at the borders are removed.
+
+    Returns:
+        Trimmed list of cuts.
+    """
+    if len(cuts) < 4:
+        # Need at least [0, a, b, limit] to have something to trim
+        return cuts
+
+    # Compute cell sizes
+    sizes = [cuts[i + 1] - cuts[i] for i in range(len(cuts) - 1)]
+    median_size = float(sorted(sizes)[len(sizes) // 2])
+
+    if median_size <= 0:
+        return cuts
+
+    threshold = median_size * min_cell_fraction
+
+    result = list(cuts)
+
+    # Trim leading margin: if first cell is too small, remove the cut after 0
+    while len(result) >= 4:
+        first_size = result[1] - result[0]
+        if first_size < threshold:
+            result.pop(1)
+        else:
+            break
+
+    # Trim trailing margin: if last cell is too small, remove the cut before limit
+    while len(result) >= 4:
+        last_size = result[-1] - result[-2]
+        if last_size < threshold:
+            result.pop(-2)
+        else:
+            break
+
+    return result
+
+
 def stabilize_both_axes(
     profile_x: Sequence[float],
     profile_y: Sequence[float],

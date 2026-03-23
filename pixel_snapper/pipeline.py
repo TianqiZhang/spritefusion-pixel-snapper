@@ -26,6 +26,7 @@ from .grid import (
     find_best_offset,
     resolve_step_sizes,
     stabilize_both_axes,
+    trim_margin_cuts,
     walk_with_offset,
 )
 from .profile import compute_profiles
@@ -260,6 +261,10 @@ def process_image_bytes_with_grid(
         height,
         config,
     )
+
+    # Remove thin border cells caused by margin/background
+    col_cuts = trim_margin_cuts(col_cuts)
+    row_cuts = trim_margin_cuts(row_cuts)
     t6 = time.perf_counter()
 
     # Select resampling strategy
